@@ -41,8 +41,11 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}@media(m
 <section id="team" class="panel"><div class="card"><h2>Equipe da escola</h2><p class="muted">Para adicionar professores, crie a conta pelo botão “Criar conta” na tela inicial. Depois, o administrador da escola deve vincular o usuário à escola pelo painel do Supabase, seguindo o README. A criação de convites por e-mail será adicionada em uma próxima etapa com função de servidor.</p><div id="teamList"></div></div></section>
 </main><footer>FaceAI Online • Dados sincronizados pelo Supabase • Chamada manual</footer></div>
 <script src="./config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+
 <script>
-const $=id=>document.getElementById(id);let client=null,session=null,schools=[],activeSchool=null,classes=[],students=[],attendance=[],reportData=[];
+const $=id=>document.getElementById(id);
 const today=()=>new Date().toISOString().slice(0,10);
 function message(id,text,kind=''){let e=$(id);e.textContent=text;e.className='status '+kind}
 function go(page){document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===page));document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));if(page==='attendance')renderAttendance()}
