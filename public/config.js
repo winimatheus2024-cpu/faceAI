@@ -1,4 +1,4 @@
 window.FACEAI_CONFIG = {
-  url: sb_publishable_tSs8q_MSZgDFMNL7MZFUiA_N63I9cyo
-  anonKey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3cHpmdGZxcXFubmlsY3V1d3doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0NTgzMjgsImV4cCI6MjEwOTAzNDMyOH0.waERKQbIFN23iP2SQBOUyUOPAqSIbYst0D-pri9mR-o
+  url: https://awpzftfqqqnnilcuuwwh.supabase.co/rest/v1/
+  anonKey: sb_publishable_tSs8q_MSZgDFMNL7MZFUiA_N63I9cyo
 };
