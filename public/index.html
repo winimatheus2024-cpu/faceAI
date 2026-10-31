@@ -50,14 +50,37 @@ const today=()=>new Date().toISOString().slice(0,10);
 function message(id,text,kind=''){let e=$(id);e.textContent=text;e.className='status '+kind}
 function go(page){document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===page));document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));if(page==='attendance')renderAttendance()}
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>go(b.dataset.page));
-async function init(){if(!window.FACEAI_CONFIG?.url||!window.FACEAI_CONFIG?.anonKey){message('authMsg','Falta configurar public/config.js. Veja o README.','err');return}message('authMsg','Supabase conectado! Entre ou crie sua conta.','ok');client=window.supabase.createClient(FACEAI_CONFIG.url,FACEAI_CONFIG.anonKey);const {data}=await client.auth.getSession();session=data.session;if(session)await enterApp();client.auth.onAuthStateChange((_event,s)=>{
-  session=s;
-  if(s){
-    setTimeout(()=>enterApp(),0);
-   }else{
-    showAuth();
+async function init(){if(!window.FACEAI_CONFIG?.url||!window.FACEAI_CONFIG?.anonKey){async function init(){
+  if(!window.FACEAI_CONFIG){
+    message('authMsg','O arquivo config.js não foi carregado.','err');
+    return;
   }
-});
+
+  if(!FACEAI_CONFIG.url || !FACEAI_CONFIG.anonKey){
+    message('authMsg','A configuração está incompleta.','err');
+    return;
+  }
+
+  message('authMsg','Supabase conectado! Entre ou crie sua conta.','ok');
+
+  client=window.supabase.createClient(
+    FACEAI_CONFIG.url,
+    FACEAI_CONFIG.anonKey
+  );
+
+  const {data}=await client.auth.getSession();
+  session=data.session;
+
+  if(session) await enterApp();
+
+  client.auth.onAuthStateChange((_event,s)=>{
+    session=s;
+    if(s){
+      setTimeout(()=>enterApp(),0);
+    }else{
+      showAuth();
+    }
+  });
 }
 
 
