@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#103f69">
+<title>FaceAI — Prévia de chamada automática</title>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js"></script>
+<style>
+:root{--blue:#1769aa;--navy:#103f69;--bg:#f3f7fb;--ink:#182433;--muted:#6b7b8c;--line:#dce5ee;--green:#16834a;--amber:#946200}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Arial,sans-serif}
+header{background:linear-gradient(120deg,var(--navy),#1976bd);color:white;padding:18px 16px}
+.wrap{max-width:900px;margin:auto;padding:0 16px}header .wrap{display:flex;align-items:center;gap:12px}
+.logo{font-size:27px;font-weight:700}header p{margin:0;color:#dceeff;font-size:13px}
+main{padding:18px 0 36px}.notice,.card{background:white;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.notice{background:#fff8e6;border-color:#efd58c;color:#684d0b}
+h1{font-size:21px;margin:0}h2{font-size:18px;margin:0 0 10px}.muted{color:var(--muted);font-size:13px}
+select,button{font:inherit;border-radius:9px;padding:11px 13px}select{width:100%;border:1px solid #cbd7e2;background:white}
+button{border:0;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:white}.secondary{background:#e8eef4;color:#29445b}.primary:disabled{opacity:.5;cursor:not-allowed}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.camera{position:relative;background:#10283d;border-radius:12px;overflow:hidden;margin-top:12px;min-height:220px;display:grid;place-items:center}
+video{display:block;width:100%;max-height:440px;object-fit:cover;transform:scaleX(-1)}canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1)}
+.placeholder{color:#dceeff;text-align:center;padding:30px}.state{padding:11px;border-radius:9px;background:#edf4fa;margin-top:10px}.state.good{background:#e9f7ef;color:#145c39}.state.warn{background:#fff8e6;color:#684d0b}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}.stat{background:#f7fafd;border:1px solid var(--line);padding:12px;border-radius:10px}.stat b{display:block;color:var(--blue);font-size:23px}.stat span{font-size:12px;color:var(--muted)}
+.event{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.event:last-child{border:0}.tag{font-size:11px;font-weight:700;background:#fff3d6;color:#805700;border-radius:20px;padding:5px 8px;white-space:nowrap}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
+@media(max-width:560px){.wrap{padding:0 12px}.card,.notice{padding:13px}.stats{gap:6px}.stat{padding:9px}.stat b{font-size:20px}.camera{min-height:190px}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><div class="logo">◎ FaceAI</div><div><h1>Chamada automática — prévia</h1><p>Protótipo independente • não conectado ao sistema escolar</p></div></div></header>
+<main class="wrap">
+<div class="notice"><b>Modo de demonstração e privacidade:</b> esta página detecta somente a presença de um rosto. Não identifica pessoas, não compara rostos, não captura nem armazena imagens e não registra presença real. Os eventos ficam apenas nesta página enquanto ela estiver aberta.</div>
+<section class="card">
+<h2>Configuração da chamada</h2>
+<label for="className" class="muted">Turma de demonstração</label>
+<select id="className"><option>6º Ano B — Vespertino (fictícia)</option><option>Turma de demonstração A</option></select>
+<div class="controls"><button id="start" class="primary">Ativar câmera</button><button id="stop" class="secondary" disabled>Desligar câmera</button><button id="clear" class="secondary">Limpar eventos</button></div>
+<div class="camera" id="camera"><div class="placeholder" id="placeholder">📷<br><b>Câmera desligada</b><br><small>Ative a câmera para testar a detecção de presença.</small></div><video id="video" autoplay muted playsinline hidden></video><canvas id="overlay" hidden></canvas></div>
+<div id="state" class="state">Aguardando autorização da câmera.</div>
+<div class="stats"><div class="stat"><b id="faces">0</b><span>Rostos detectados agora</span></div><div class="stat"><b id="events">0</b><span>Eventos nesta sessão</span></div><div class="stat"><b id="pending">0</b><span>Pendências fictícias</span></div></div>
+</section>
+<section class="card"><h2>Eventos recentes</h2><p class="muted">A detecção não informa quem é a pessoa. Cada evento precisa de conferência por um responsável antes de qualquer chamada real.</p><div id="log"><p class="muted">Nenhum evento nesta sessão.</p></div></section>
+<section class="card"><h2>Próximas etapas do projeto</h2><ul><li>Testar câmera e detecção em Android e iPhone.</li><li>Definir procedimento de revisão de eventos inconclusivos.</li><li>Revisar segurança, transparência, base legal e retenção de dados antes de qualquer uso com dados reais.</li><li>Manter a chamada real e o banco de dados isolados deste protótipo.</li></ul></section>
+</main>
+<footer>FaceAI • Protótipo local de detecção de presença • Nenhum dado é enviado ao Supabase</footer>
+<script>
+const $=id=>document.getElementById(id);
+let stream=null,detector=null,raf=0,busy=false,eventCount=0,lastEvent=0,sessionEvents=[];
+function status(text,kind=''){ $('state').textContent=text; $('state').className='state '+kind; }
+function addEvent(count){
+  const now=Date.now(); if(now-lastEvent<2500)return; lastEvent=now;
+  eventCount++; sessionEvents.unshift({time:new Date().toLocaleTimeString('pt-BR'),count});
+  $('events').textContent=eventCount; $('pending').textContent=sessionEvents.length;
+  $('log').innerHTML=sessionEvents.map(e=>'<div class="event"><div><b>Presença detectada</b><div class="muted">'+e.time+' • '+e.count+' rosto(s) no enquadramento</div></div><span class="tag">Não identificado</span></div>').join('');
+}
+function draw(results){
+  const canvas=$('overlay'),video=$('video'),ctx=canvas.getContext('2d');
+  canvas.width=video.videoWidth||640;canvas.height=video.videoHeight||480;ctx.clearRect(0,0,canvas.width,canvas.height);
+  const detections=results.detections||[];$('faces').textContent=detections.length;
+  detections.forEach(d=>{const b=d.boundingBox,x=b.xCenter*canvas.width-b.width*canvas.width/2,y=b.yCenter*canvas.height-b.height*canvas.height/2,w=b.width*canvas.width,h=b.height*canvas.height;ctx.strokeStyle='#35d07f';ctx.lineWidth=3;ctx.strokeRect(x,y,w,h)});
+  if(detections.length){status('Rosto detectado. Identidade não verificada; nenhum aluno foi marcado presente.','good');addEvent(detections.length)}
+  else status('Câmera ativa. Nenhum rosto detectado no momento.');
+}
+async function loop(){
+  if(!stream||busy)return;
+  if($('video').readyState>=2&&detector){busy=true;try{await detector.send({image:$('video')})}catch(e){status('Falha na detecção: '+e.message,'warn')}finally{busy=false}}
+  if(stream)raf=requestAnimationFrame(loop);
+}
+async function start(){
+  if(!navigator.mediaDevices?.getUserMedia){status('Este navegador não oferece acesso à câmera. Abra a página em HTTPS e use um navegador compatível.','warn');return}
+  try{
+    status('Solicitando permissão para usar a câmera...');
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
+    $('video').srcObject=stream;$('video').hidden=false;$('placeholder').hidden=true;$('overlay').hidden=false;
+    await $('video').play();
+    if(!window.FaceDetection)throw new Error('Biblioteca de detecção indisponível. Verifique a conexão com a internet.');
+    detector=new FaceDetection({locateFile:file=>'https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/'+file});
+    detector.setOptions({model:'short',minDetectionConfidence:.6});
+    detector.onResults(draw);
+    $('start').disabled=true;$('stop').disabled=false;
+    status('Câmera ativa. Detecção de presença iniciada; sem identificação de pessoas.','good');loop();
+  }catch(e){stop();status('Não foi possível iniciar a câmera: '+e.message,'warn')}
+}
+function stop(){
+  if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;detector=null;cancelAnimationFrame(raf);
+  $('video').srcObject=null;$('video').hidden=true;$('overlay').hidden=true;$('placeholder').hidden=false;
+  $('start').disabled=false;$('stop').disabled=true;$('faces').textContent='0';
+  status('Câmera desligada. Os eventos desta sessão permanecem apenas nesta página.');
+}
+$('start').onclick=start;$('stop').onclick=stop;
+$('clear').onclick=()=>{eventCount=0;sessionEvents=[];$('events').textContent='0';$('pending').textContent='0';$('log').innerHTML='<p class="muted">Nenhum evento nesta sessão.</p>';status(stream?'Câmera ativa. Eventos da sessão foram limpos.':'Eventos da sessão foram limpos.')};
+window.addEventListener('pagehide',stop);
+</script>
+</body></html>
