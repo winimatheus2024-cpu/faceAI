@@ -90,3 +90,4 @@ $('downloadCsv').onclick=()=>{let rows=[['Aluno','Matricula','Data','Status'],..
 async function renderTeam(){let {data,error}=await client.from('school_members').select('user_id,role').eq('school_id',activeSchool);let r=$('teamList');r.innerHTML='';if(error){r.textContent='Não foi possível carregar a equipe.';return}(data||[]).forEach(m=>{let d=document.createElement('div');d.className='row';d.textContent=m.user_id===session.user.id?'Você — '+m.role:'Usuário '+m.user_id.slice(0,8)+'… — '+m.role;r.append(d)})}
 init();
 </script></body></html>
+<!-- TESTE FACEAI 123 -->
