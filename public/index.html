@@ -4,6 +4,8 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FaceAI — Plataforma Escolar</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="/config.js"></script>
 <style>
 :root{--blue:#1769aa;--navy:#103f69;--bg:#f3f7fb;--ink:#182433;--muted:#6b7b8c;--line:#dce5ee;--red:#b42318}
@@ -17,7 +19,7 @@ main{padding:18px 0 40px}.notice{background:#fff8e6;border:1px solid #efd58c;col
 .panel{display:none}.panel.active{display:block}.card{background:white;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{padding:13px;background:#f7fafd;border:1px solid var(--line);border-radius:11px}.stat b{display:block;font-size:24px;color:var(--blue)}.stat span{font-size:12px;color:var(--muted)}
 h2{font-size:18px;margin:0 0 12px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.status{padding:10px;border-radius:9px;background:#edf4fa;margin-top:10px}.ok{background:#e9f7ef;color:#145c39}.err{background:#fff0ef;color:#9d2119}
 .row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.row small{display:block;color:var(--muted)}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:520px}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--line);font-size:13px}th{background:#f7fafd;color:var(--muted)}
-footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}@media(max-width:700px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,1fr)}.card{padding:13px}.user{display:none}}
+.cameraBox{position:relative;background:#10283d;border-radius:12px;overflow:hidden;max-width:720px;margin-top:12px;min-height:180px}.cameraBox video{display:block;width:100%;transform:scaleX(-1)}.cameraBox canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)}.cameraState{padding:11px;border-radius:9px;background:#edf4fa;margin-top:10px}.cameraState.detected{background:#e9f7ef;color:#145c39}.cameraState.notdetected{background:#fff8e6;color:#684d0b}footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}@media(max-width:700px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,1fr)}.card{padding:13px}.user{display:none}}
 [hidden]{display:none!important}
 </style></head>
 <body>
@@ -33,12 +35,13 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}@media(m
 <main class="wrap">
 <div class="notice"><b>Privacidade:</b> esta versão online não coleta nem armazena rostos ou modelos biométricos. Use a chamada manual. Dados de alunos são pessoais: cadastre somente o necessário, com autorização e base legal apropriadas, e restrinja o acesso conforme a LGPD.</div>
 <div class="card"><label style="margin-top:0">Escola</label><div class="actions"><select id="schoolSelect" style="max-width:500px"></select><button class="secondary" id="createSchool">+ Criar escola</button></div></div>
-<nav class="nav"><button class="active" data-page="dashboard">Painel</button><button data-page="students">Alunos</button><button data-page="classes">Turmas</button><button data-page="attendance">Chamada</button><button data-page="reports">Relatórios</button><button data-page="team">Equipe</button></nav>
+<nav class="nav"><button class="active" data-page="dashboard">Painel</button><button data-page="students">Alunos</button><button data-page="classes">Turmas</button><button data-page="attendance">Chamada</button><button data-page="reports">Relatórios</button><button data-page="team">Equipe</button><button data-page="faceTest">Teste de câmera</button></nav>
 <section id="dashboard" class="panel active"><div class="card"><h2>Resumo</h2><div class="stats"><div class="stat"><b id="countStudents">0</b><span>Alunos</span></div><div class="stat"><b id="countClasses">0</b><span>Turmas</span></div><div class="stat"><b id="countToday">0</b><span>Presenças hoje</span></div></div></div><div class="card"><h2>Atividade recente</h2><div id="recent"></div></div></section>
 <section id="students" class="panel"><div class="grid"><div class="card"><h2>Novo aluno</h2><label>Nome completo</label><input id="studentName" maxlength="100"><label>Matrícula (opcional)</label><input id="studentCode" maxlength="40"><label>Turma</label><select id="studentClass"></select><button class="primary" id="addStudent" style="margin-top:12px">Cadastrar aluno</button><div id="studentMsg" class="status"></div></div><div class="card"><h2>Alunos</h2><div id="studentsList"></div></div></div></section>
 <section id="classes" class="panel"><div class="grid"><div class="card"><h2>Nova turma</h2><label>Nome</label><input id="className" placeholder="Ex.: 1º Ano A"><label>Turno</label><select id="classShift"><option>Matutino</option><option>Vespertino</option><option>Noturno</option><option>Integral</option></select><button class="primary" id="addClass" style="margin-top:12px">Criar turma</button><div id="classMsg" class="status"></div></div><div class="card"><h2>Turmas cadastradas</h2><div id="classesList"></div></div></div></section>
 <section id="attendance" class="panel"><div class="card"><h2>Chamada</h2><div class="grid"><div><label>Turma</label><select id="attendanceClass"></select></div><div><label>Data</label><input id="attendanceDate" type="date"></div></div><div id="attendanceRows"></div><button class="primary" id="saveAttendance" style="margin-top:12px">Salvar chamada</button><div id="attendanceMsg" class="status"></div></div></section>
 <section id="reports" class="panel"><div class="card"><h2>Relatório de frequência</h2><div class="grid"><div><label>Turma</label><select id="reportClass"></select></div><div><label>Data inicial</label><input id="dateFrom" type="date"></div><div><label>Data final</label><input id="dateTo" type="date"></div></div><div class="actions"><button class="primary" id="generateReport">Gerar relatório</button><button class="secondary" id="downloadCsv">Baixar CSV</button></div><div id="reportMsg" class="status"></div><div id="reportTable" class="tablewrap"></div></div></section>
+<section id="faceTest" class="panel"><div class="card"><h2>Teste de detecção facial</h2><p class="muted">Este protótipo apenas detecta a presença de um rosto. Não identifica pessoas, não tira fotos e não salva nem envia imagens.</p><div class="actions"><button class="primary" id="startCamera">Ativar câmera</button><button class="secondary" id="stopCamera" disabled>Desligar câmera</button></div><div class="cameraBox" id="cameraBox" hidden><video id="cameraVideo" playsinline muted></video><canvas id="cameraCanvas"></canvas></div><div id="cameraStatus" class="cameraState">Câmera desligada.</div><p class="muted">Use apenas em ambiente de teste autorizado. O navegador solicitará permissão para acessar a câmera.</p></div></section>
 <section id="team" class="panel"><div class="card"><h2>Equipe da escola</h2><p class="muted">Para adicionar professores, crie a conta pelo botão “Criar conta” na tela inicial. Depois, o administrador da escola deve vincular o usuário à escola pelo painel do Supabase, seguindo o README. A criação de convites por e-mail será adicionada em uma próxima etapa com função de servidor.</p><div id="teamList"></div></div></section>
 </main><footer>FaceAI Online • Dados sincronizados pelo Supabase • Chamada manual</footer></div>
 <script>
@@ -188,6 +191,54 @@ $('saveAttendance').onclick=async()=>{let date=$('attendanceDate').value,items=[
 $('generateReport').onclick=()=>{let from=$('dateFrom').value,to=$('dateTo').value,cl=$('reportClass').value;reportData=attendance.filter(a=>(!from||a.date>=from)&&(!to||a.date<=to)&&(!cl||students.find(s=>s.id===a.student_id)?.class_id===cl));message('reportMsg',reportData.length+' registros; '+reportData.filter(a=>a.status==='Presente').length+' presenças.');let t=document.createElement('table');t.innerHTML='<thead><tr><th>Aluno</th><th>Matrícula</th><th>Data</th><th>Status</th></tr></thead>';let body=document.createElement('tbody');reportData.forEach(a=>{let s=students.find(x=>x.id===a.student_id),tr=document.createElement('tr');[s?.name||'Aluno',s?.registration||'—',a.date,a.status].forEach(v=>{let td=document.createElement('td');td.textContent=v;tr.append(td)});body.append(tr)});t.append(body);$('reportTable').innerHTML='';$('reportTable').append(t)};
 $('downloadCsv').onclick=()=>{let rows=[['Aluno','Matricula','Data','Status'],...reportData.map(a=>{let s=students.find(x=>x.id===a.student_id);return[s?.name||'',s?.registration||'',a.date,a.status]})];let csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n'),url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='faceai-relatorio.csv';a.click();URL.revokeObjectURL(url)};
 async function renderTeam(){if(activeRole!=='admin')return;let {data,error}=await client.from('school_members').select('user_id,role').eq('school_id',activeSchool);let r=$('teamList');r.innerHTML='';if(error){r.textContent='Não foi possível carregar a equipe.';return}(data||[]).forEach(m=>{let d=document.createElement('div');d.className='row';d.textContent=m.user_id===session.user.id?'Você — '+m.role:'Usuário '+m.user_id.slice(0,8)+'… — '+m.role;r.append(d)})}
+
+let faceDetector=null,cameraStream=null,cameraLoop=null,faceActive=false;
+function cameraMessage(text,kind=''){const el=$('cameraStatus');el.textContent=text;el.className='cameraState '+kind}
+async function startFaceTest(){
+  if(faceActive)return;
+  if(!navigator.mediaDevices?.getUserMedia){cameraMessage('Este navegador não permite acesso à câmera neste contexto. Use HTTPS.','notdetected');return}
+  try{
+    if(!window.FaceDetection||!window.Camera){cameraMessage('Não foi possível carregar o detector. Verifique sua conexão e atualize a página.','notdetected');return}
+    faceDetector=new FaceDetection({locateFile:file=>'https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/'+file});
+    faceDetector.setOptions({model:'short',minDetectionConfidence:0.6});
+    faceDetector.onResults(results=>{
+      const video=$('cameraVideo'),canvas=$('cameraCanvas'),box=$('cameraBox');
+      const w=video.videoWidth,h=video.videoHeight;
+      if(!w||!h)return;
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');ctx.clearRect(0,0,w,h);
+      const faces=results.detections||[];
+      faces.forEach(face=>{
+        const b=face.boundingBox;
+        ctx.strokeStyle='#35d07f';ctx.lineWidth=Math.max(3,w/240);
+        ctx.strokeRect(b.xCenter*w-b.width*w/2,b.yCenter*h-b.height*h/2,b.width*w,b.height*h);
+      });
+      cameraMessage(faces.length?'Rosto detectado. Nenhuma identidade foi identificada.':'Nenhum rosto detectado.',faces.length?'detected':'notdetected');
+    });
+    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
+    const video=$('cameraVideo');video.srcObject=cameraStream;await video.play();
+    $('cameraBox').hidden=false;
+    cameraLoop=new Camera(video,{onFrame:async()=>{if(faceActive)await faceDetector.send({image:video})},width:640,height:480});
+    faceActive=true;cameraLoop.start();
+    $('startCamera').disabled=true;$('stopCamera').disabled=false;
+    cameraMessage('Câmera ativa. Procurando rosto…');
+  }catch(error){
+    stopFaceTest();
+    cameraMessage('Não foi possível iniciar a câmera: '+error.message,'notdetected');
+  }
+}
+function stopFaceTest(){
+  faceActive=false;
+  if(cameraLoop){cameraLoop.stop();cameraLoop=null}
+  if(cameraStream){cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null}
+  const video=$('cameraVideo');if(video)video.srcObject=null;
+  const canvas=$('cameraCanvas');if(canvas){const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height)}
+  $('cameraBox').hidden=true;$('startCamera').disabled=false;$('stopCamera').disabled=true;
+  cameraMessage('Câmera desligada.');
+  if(faceDetector){faceDetector.close();faceDetector=null}
+}
+$('startCamera').onclick=startFaceTest;$('stopCamera').onclick=stopFaceTest;
+
 init();
 </script></body></html>
 <!-- TESTE FACEAI 123 -->
