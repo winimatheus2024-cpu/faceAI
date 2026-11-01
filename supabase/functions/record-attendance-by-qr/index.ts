@@ -55,11 +55,29 @@ Deno.serve(async (req) => {
   if (studentError || !student) return json({ error: "Aluno não encontrado." }, 404);
 
   if (membership.role !== "admin") {
-    if (!student.class_id) return json({ error: "Aluno sem turma vinculada. Encaminhe para revisão." }, 409);
+    if (!student.class_id) {
+      const date = localDate();
+      const { data: pending, error: queueError } = await db.from("qr_attendance_reviews").upsert({
+        school_id: student.school_id, student_id: student.id, scanned_by: user.id,
+        attendance_date: date, reason: "student_without_class", status: "pending",
+      }, { onConflict: "student_id,attendance_date", ignoreDuplicates: true }).select("id").maybeSingle();
+      if (queueError) return json({ error: "Não foi possível enviar para revisão." }, 500);
+      return json({ status: "pending_review", student: { id: student.id, name: student.name },
+        message: "Aluno sem turma vinculada. Solicitação enviada à direção para revisão." });
+    }
     const { data: assignment, error: assignmentError } = await db
       .from("class_teachers").select("id").eq("school_id", student.school_id)
       .eq("class_id", student.class_id).eq("teacher_id", user.id).maybeSingle();
-    if (assignmentError || !assignment) return json({ error: "Você não está vinculado à turma deste aluno." }, 403);
+    if (assignmentError || !assignment) {
+      const date = localDate();
+      const { error: queueError } = await db.from("qr_attendance_reviews").upsert({
+        school_id: student.school_id, student_id: student.id, scanned_by: user.id,
+        attendance_date: date, reason: "teacher_not_assigned", status: "pending",
+      }, { onConflict: "student_id,attendance_date", ignoreDuplicates: true });
+      if (queueError) return json({ error: "Não foi possível enviar para revisão." }, 500);
+      return json({ status: "pending_review", student: { id: student.id, name: student.name },
+        message: "Professor não vinculado à turma. Solicitação enviada à direção para revisão." });
+    }
   }
 
   const date = localDate();
