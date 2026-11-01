@@ -123,18 +123,28 @@ async function createSchool(){
   const name=prompt('Nome da escola:');
   if(!name||!name.trim())return;
 
-  const {data,error}=await client
+  // Gera o ID no cliente para buscar a escola somente após o gatilho criar o vínculo de admin.
+  const schoolId=crypto.randomUUID();
+  const {error:insertError}=await client
     .from('schools')
-    .insert({name:name.trim(),created_by:session.user.id})
-    .select('id,name')
-    .single();
+    .insert({id:schoolId,name:name.trim(),created_by:session.user.id});
 
-  if(error){
-    alert('Erro ao criar escola: '+error.message);
+  if(insertError){
+    alert('Erro ao criar escola: '+insertError.message);
     return;
   }
 
-  // O gatilho do banco cria automaticamente o vínculo do criador como admin.
+  const {data,error}=await client
+    .from('schools')
+    .select('id,name')
+    .eq('id',schoolId)
+    .single();
+
+  if(error){
+    alert('A escola foi criada, mas não foi possível carregá-la: '+error.message);
+    return;
+  }
+
   activeSchool=data.id;
   await loadSchools();
   $('schoolSelect').value=data.id;
