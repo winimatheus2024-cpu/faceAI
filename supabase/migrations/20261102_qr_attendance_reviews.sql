@@ -1,5 +1,9 @@
 -- Persistent manual review queue for QR attendance.
 begin;
+
+-- Required composite key for the school-scoped student foreign key.
+create unique index if not exists students_id_school_unique_idx
+  on public.students(id, school_id);
 create table if not exists public.qr_attendance_reviews (
   id uuid primary key default gen_random_uuid(),
   school_id uuid not null references public.schools(id) on delete cascade,
