@@ -70,6 +70,7 @@ Deno.serve(async (req) => {
   return json({
     student: { id: student.id, name: student.name },
     token,
+    studentPageUrl: `https://faceai-plum.vercel.app/aluno-qr.html?t=${token}`,
     message: "Guarde e entregue este código somente ao aluno. Ele não será exibido novamente.",
   });
 });
