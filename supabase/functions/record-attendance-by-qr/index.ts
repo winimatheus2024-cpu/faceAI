@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
         school_id: student.school_id, student_id: student.id, scanned_by: user.id,
         attendance_date: date, reason: "teacher_not_assigned", status: "pending",
       });
-      if (queueError) return json({ error: "Não foi possível enviar para revisão." }, 500);
+      if (queueError && queueError.code !== "23505") return json({ error: "Não foi possível enviar para revisão." }, 500);
       return json({ status: "pending_review", student: { id: student.id, name: student.name },
         message: "Professor não vinculado à turma. Solicitação enviada à direção para revisão." });
     }
