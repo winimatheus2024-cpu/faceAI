@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FaceAI — Leitor QR</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/config.js"></script><script src="https://unpkg.com/html5-qrcode"></script>
+<style>body{font:16px Arial;background:#f3f7fb;color:#182433;margin:0;padding:20px}.box{max-width:620px;margin:25px auto;background:white;padding:20px;border-radius:14px}button{padding:12px;border:0;border-radius:8px;background:#1769aa;color:white;font-weight:bold}#reader{margin-top:16px}.status{padding:12px;background:#edf4fa;border-radius:8px;margin-top:12px}</style></head><body><main class="box"><h1>Leitor de QR Code</h1><p>Entre com a conta do professor. A câmera apenas lê o QR; a presença é validada pelo servidor.</p><button id="start">Entrar e iniciar câmera</button><div id="reader"></div><div id="status" class="status">Aguardando autenticação.</div></main>
+<script>
+const statusEl=document.getElementById('status');let client,scanner,locked=false;
+function say(t){statusEl.textContent=t}
+async function start(){
+ if(!window.FACEAI_CONFIG?.url||!window.FACEAI_CONFIG?.anonKey){say('Configuração do Supabase ausente.');return}
+ client=window.supabase.createClient(FACEAI_CONFIG.url,FACEAI_CONFIG.anonKey);
+ const {data:{session},error}=await client.auth.getSession();
+ if(error||!session){say('Faça login no FaceAI em outra aba e abra novamente este leitor.');return}
+ if(!window.Html5Qrcode){say('Leitor não carregou. Verifique a conexão.');return}
+ scanner=new Html5Qrcode('reader');
+ try{await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},async(decoded)=>{
+   if(locked)return;locked=true;say('QR lido. Validando presença…');
+   try{
+    const {data,error}=await client.functions.invoke('record-attendance-by-qr',{body:{token:decoded.trim()}});
+    if(error||data?.error){say(data?.error||error?.message||'Falha ao validar QR.');}
+    else if(data.status==='already_recorded'){say(data.message||'Presença já registrada hoje.');}
+    else{say('Presença registrada: '+data.student.name+' — '+data.attendance.date);}
+   }catch(e){say('Erro: '+e.message)}
+   setTimeout(()=>{locked=false;say('Pronto para ler o próximo QR Code.');},2500);
+  });say('Câmera ativa. Aponte para o QR Code do aluno.')}
+ catch(e){say('Não foi possível abrir a câmera: '+e)}
+}
+document.getElementById('start').onclick=start;
+</script></body></html>
