@@ -57,11 +57,11 @@ Deno.serve(async (req) => {
   if (membership.role !== "admin") {
     if (!student.class_id) {
       const date = localDate();
-      const { data: pending, error: queueError } = await db.from("qr_attendance_reviews").upsert({
+      const { error: queueError } = await db.from("qr_attendance_reviews").insert({
         school_id: student.school_id, student_id: student.id, scanned_by: user.id,
         attendance_date: date, reason: "student_without_class", status: "pending",
-      }, { onConflict: "student_id,attendance_date", ignoreDuplicates: true }).select("id").maybeSingle();
-      if (queueError) return json({ error: "Não foi possível enviar para revisão." }, 500);
+      });
+      if (queueError && queueError.code !== "23505") return json({ error: "Não foi possível enviar para revisão." }, 500);
       return json({ status: "pending_review", student: { id: student.id, name: student.name },
         message: "Aluno sem turma vinculada. Solicitação enviada à direção para revisão." });
     }
@@ -70,10 +70,10 @@ Deno.serve(async (req) => {
       .eq("class_id", student.class_id).eq("teacher_id", user.id).maybeSingle();
     if (assignmentError || !assignment) {
       const date = localDate();
-      const { error: queueError } = await db.from("qr_attendance_reviews").upsert({
+      const { error: queueError } = await db.from("qr_attendance_reviews").insert({
         school_id: student.school_id, student_id: student.id, scanned_by: user.id,
         attendance_date: date, reason: "teacher_not_assigned", status: "pending",
-      }, { onConflict: "student_id,attendance_date", ignoreDuplicates: true });
+      });
       if (queueError) return json({ error: "Não foi possível enviar para revisão." }, 500);
       return json({ status: "pending_review", student: { id: student.id, name: student.name },
         message: "Professor não vinculado à turma. Solicitação enviada à direção para revisão." });
