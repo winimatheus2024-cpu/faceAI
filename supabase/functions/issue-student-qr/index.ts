@@ -81,18 +81,6 @@ Deno.serve(async (req) => {
     return json({ error: "Não foi possível concluir a renovação. O QR anterior foi preservado sempre que possível." }, 500);
   }
 
-  const random = crypto.getRandomValues(new Uint8Array(32));
-  const token = [...random].map((b) => b.toString(16).padStart(2, "0")).join("");
-  const tokenHash = await sha256(token);
-  const { error: insertError } = await db.from("student_qr_credentials").insert({
-    school_id: student.school_id,
-    student_id: student.id,
-    token_hash: tokenHash,
-    created_by: user.id,
-    active: true,
-  });
-  if (insertError) return json({ error: "Não foi possível emitir o QR Code." }, 500);
-
   return json({
     student: { id: student.id, name: student.name },
     token,
