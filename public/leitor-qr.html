@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FaceAI — Leitor QR</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/config.js"></script><script src="https://unpkg.com/html5-qrcode"></script>
-<style>body{font:16px Arial;background:#f3f7fb;color:#182433;margin:0;padding:20px}.box{max-width:620px;margin:25px auto;background:white;padding:20px;border-radius:14px}button{padding:12px;border:0;border-radius:8px;background:#1769aa;color:white;font-weight:bold}#reader{margin-top:16px}.status{padding:12px;background:#edf4fa;border-radius:8px;margin-top:12px}</style></head><body><main class="box"><h1>Leitor de QR Code</h1><p>Entre com a conta do professor. A câmera apenas lê o QR; a presença é validada pelo servidor.</p><button id="start">Entrar e iniciar câmera</button><div id="reader"></div><div id="status" class="status">Aguardando autenticação.</div></main>
+<style>body{font:16px Arial;background:#f3f7fb;color:#182433;margin:0;padding:20px}.box{max-width:620px;margin:25px auto;background:white;padding:20px;border-radius:14px}button{padding:12px;border:0;border-radius:8px;background:#1769aa;color:white;font-weight:bold}#reader{margin-top:16px}.status{padding:12px;background:#edf4fa;border-radius:8px;margin-top:12px}</style></head><body><main class="box"><h1>Leitor de QR Code</h1><p>Entre com a conta do professor. A câmera apenas lê o QR; a presença é validada pelo servidor.</p><button id="start">Entrar e iniciar câmera</button><div id="reader"></div><div id="status" class="status">Aguardando autenticação.</div><hr><h2>Revisão da direção</h2><button id="loadReviews" type="button">Ver pendências</button><div id="reviews"></div></main>
 <script>
 const statusEl=document.getElementById('status');let client,scanner,locked=false;
 function say(t){statusEl.textContent=t}
@@ -24,5 +24,32 @@ async function start(){
   });say('Câmera ativa. Aponte para o QR Code do aluno.')}
  catch(e){say('Não foi possível abrir a câmera: '+e)}
 }
+
+async function loadReviews(){
+ const host=document.getElementById('reviews');host.textContent='Carregando…';
+ if(!client){host.textContent='Entre primeiro pelo botão acima.';return}
+ const {data,error}=await client.functions.invoke('review-qr-attendance',{body:{action:'list'}});
+ if(error||data?.error){host.textContent=data?.error||error?.message||'Falha ao carregar.';return}
+ host.innerHTML='';
+ if(!data.reviews?.length){host.textContent='Nenhuma pendência.';return}
+ data.reviews.forEach(r=>{
+  const card=document.createElement('section');card.className='status';
+  const name=r.students?.name||'Aluno';
+  const reason=r.reason==='student_without_class'?'Aluno sem turma':'Professor sem vínculo com a turma';
+  const title=document.createElement('p');title.textContent=name+' — '+r.attendance_date+' — '+reason;
+  card.appendChild(title);
+  ['approve','reject'].forEach(decision=>{
+   const b=document.createElement('button');b.type='button';b.textContent=decision==='approve'?'Aprovar presença':'Rejeitar';
+   b.style.marginRight='8px';b.onclick=async()=>{
+    b.disabled=true;
+    const result=await client.functions.invoke('review-qr-attendance',{body:{action:'decide',review_id:r.id,decision}});
+    if(result.error||result.data?.error){say(result.data?.error||result.error?.message||'Falha ao revisar.');b.disabled=false;}
+    else{say(result.data.message);loadReviews();}
+   };card.appendChild(b);
+  });
+  host.appendChild(card);
+ });
+}
+document.getElementById('loadReviews').onclick=loadReviews;
 document.getElementById('start').onclick=start;
 </script></body></html>
