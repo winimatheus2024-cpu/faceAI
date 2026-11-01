@@ -18,7 +18,9 @@ async function start(){
     const {data,error}=await client.functions.invoke('record-attendance-by-qr',{body:{token:decoded.trim()}});
     if(error||data?.error){say(data?.error||error?.message||'Falha ao validar QR.');}
     else if(data.status==='already_recorded'){say(data.message||'Presença já registrada hoje.');}
-    else{say('Presença registrada: '+data.student.name+' — '+data.attendance.date);}
+    else if(data.status==='pending_review'){say(data.message||'Solicitação enviada para revisão da direção. A presença ainda não foi confirmada.');}
+    else if(data.status==='recorded'&&data.student&&data.attendance){say('Presença registrada: '+data.student.name+' — '+data.attendance.date);}
+    else{say('Resposta inesperada do servidor. A presença não foi confirmada; consulte a direção.');}
    }catch(e){say('Erro: '+e.message)}
    setTimeout(()=>{locked=false;say('Pronto para ler o próximo QR Code.');},2500);
   });say('Câmera ativa. Aponte para o QR Code do aluno.')}
