@@ -41,7 +41,7 @@ h2{font-size:18px;margin:0 0 12px}.actions{display:flex;gap:8px;flex-wrap:wrap;m
 <section id="classes" class="panel"><div class="grid"><div class="card"><h2>Nova turma</h2><label>Nome</label><input id="className" placeholder="Ex.: 1º Ano A"><label>Turno</label><select id="classShift"><option>Matutino</option><option>Vespertino</option><option>Noturno</option><option>Integral</option></select><button class="primary" id="addClass" style="margin-top:12px">Criar turma</button><div id="classMsg" class="status"></div></div><div class="card"><h2>Turmas cadastradas</h2><div id="classesList"></div></div></div></section>
 <section id="attendance" class="panel"><div class="card"><h2>Chamada</h2><div class="grid"><div><label>Turma</label><select id="attendanceClass"></select></div><div><label>Data</label><input id="attendanceDate" type="date"></div></div><div id="attendanceRows"></div><button class="primary" id="saveAttendance" style="margin-top:12px">Salvar chamada</button><div id="attendanceMsg" class="status"></div></div></section>
 <section id="reports" class="panel"><div class="card"><h2>Relatório de frequência</h2><div class="grid"><div><label>Turma</label><select id="reportClass"></select></div><div><label>Data inicial</label><input id="dateFrom" type="date"></div><div><label>Data final</label><input id="dateTo" type="date"></div></div><div class="actions"><button class="primary" id="generateReport">Gerar relatório</button><button class="secondary" id="downloadCsv">Baixar CSV</button></div><div id="reportMsg" class="status"></div><div id="reportTable" class="tablewrap"></div></div></section>
-<section id="faceTest" class="panel"><div class="card"><h2>Teste de detecção facial</h2><p class="muted">Este protótipo apenas detecta a presença de um rosto. Não identifica pessoas, não tira fotos e não salva nem envia imagens.</p><div class="actions"><button class="primary" id="startCamera">Ativar câmera</button><button class="secondary" id="stopCamera" disabled>Desligar câmera</button></div><div class="cameraBox" id="cameraBox" hidden><video id="cameraVideo" playsinline muted></video><canvas id="cameraCanvas"></canvas></div><div id="cameraStatus" class="cameraState">Câmera desligada.</div><p class="muted">Use apenas em ambiente de teste autorizado. O navegador solicitará permissão para acessar a câmera.</p></div></section>
+<section id="faceTest" class="panel"><div class="card"><h2>Detecção e chamada assistida</h2><p class="muted">A câmera apenas detecta a presença de um rosto. Ela não identifica ninguém. O professor seleciona o aluno manualmente e confirma o registro. Nenhuma foto é capturada ou armazenada.</p><div class="actions"><button class="primary" id="startCamera">Ativar câmera</button><button class="secondary" id="stopCamera" disabled>Desligar câmera</button></div><div class="cameraBox" id="cameraBox" hidden><video id="cameraVideo" playsinline muted></video><canvas id="cameraCanvas"></canvas></div><div id="cameraStatus" class="cameraState">Câmera desligada.</div><div id="assistedAttendance" hidden><h2 style="margin-top:16px">Confirmar presença manualmente</h2><p class="muted">Rosto detectado não significa identidade confirmada. Confira a pessoa presencialmente antes de selecionar o aluno.</p><label>Turma</label><select id="assistedClass"></select><label>Aluno</label><select id="assistedStudent"></select><label>Data da chamada</label><input id="assistedDate" type="date"><button class="primary" id="confirmAssisted" style="margin-top:12px">Confirmar presença</button><div id="assistedMsg" class="status">Aguardando detecção de rosto.</div></div><p class="muted">Use somente com autorização institucional e acesso restrito. A identificação é feita pelo professor, não pela câmera.</p></div></section>
 <section id="faceDemo" class="panel"><div class="card"><h2>Simulação de identificação</h2><p class="muted">Demonstração fictícia: este módulo não analisa rostos, não compara imagens e não identifica pessoas. Os nomes abaixo são exemplos inventados.</p><div class="grid"><div><label>Pessoa fictícia para a demonstração</label><select id="demoPerson"><option value="Ana Exemplo">Ana Exemplo</option><option value="Bruno Teste">Bruno Teste</option><option value="Carla Demonstração">Carla Demonstração</option></select><button class="primary" id="runDemo" style="margin-top:12px">Simular identificação</button></div><div><div id="demoResult" class="status">Aguardando simulação.</div></div></div><p class="muted">Nenhuma presença é registrada e nenhum dado é salvo. Esta demonstração não deve ser usada para tomar decisões sobre alunos.</p></div></section>
 <section id="team" class="panel"><div class="card"><h2>Equipe da escola</h2><p class="muted">Para adicionar professores, crie a conta pelo botão “Criar conta” na tela inicial. Depois, o administrador da escola deve vincular o usuário à escola pelo painel do Supabase, seguindo o README. A criação de convites por e-mail será adicionada em uma próxima etapa com função de servidor.</p><div id="teamList"></div></div></section>
 </main><footer>FaceAI Online • Dados sincronizados pelo Supabase • Chamada manual</footer></div>
@@ -180,7 +180,7 @@ $('schoolSelect').onchange=async()=>{
 async function fetchAll(table,order='created_at'){if(!activeSchool)return[];let q=client.from(table).select('*').eq('school_id',activeSchool);if(order)q=q.order(order,{ascending:false});let {data,error}=await q;if(error)throw error;return data||[]}
 async function refresh(){if(!activeSchool){$('schoolSelect').innerHTML='';$('countStudents').textContent='0';$('countClasses').textContent='0';$('countToday').textContent='0';$('studentsList').textContent='Crie uma escola para começar.';return}try{[classes,students,attendance]=await Promise.all([fetchAll('classes'),fetchAll('students','name'),fetchAll('attendance','date')]);fillSelects();renderClasses();renderStudents();renderAttendance();renderDashboard();renderTeam()}catch(e){alert('Não foi possível atualizar os dados: '+e.message)}}
 function fill(id,rows,all=false){let el=$(id),old=el.value;el.innerHTML='';if(all){let o=document.createElement('option');o.value='';o.textContent='Todas as turmas';el.append(o)}rows.forEach(x=>{let o=document.createElement('option');o.value=x.id;o.textContent=x.name;el.append(o)});if([...el.options].some(o=>o.value===old))el.value=old}
-function fillSelects(){fill('studentClass',classes);fill('attendanceClass',classes);fill('reportClass',classes,true)}
+function fillSelects(){fill('studentClass',classes);fill('attendanceClass',classes);fill('reportClass',classes,true);fill('assistedClass',classes);renderAssistedStudents()}
 async function renderDashboard(){$('countStudents').textContent=students.length;$('countClasses').textContent=classes.length;$('countToday').textContent=attendance.filter(a=>a.date===today()&&a.status==='Presente').length;let root=$('recent');root.innerHTML='';attendance.slice(0,6).forEach(a=>{let st=students.find(s=>s.id===a.student_id),p=document.createElement('p');p.className='muted';p.textContent=(st?.name||'Aluno')+' — '+a.status+' — '+a.date;root.append(p)});if(!root.children.length)root.textContent='Nenhuma chamada registrada.'}
 function renderClasses(){let r=$('classesList');r.innerHTML='';classes.forEach(c=>{let d=document.createElement('div');d.className='row';let x=document.createElement('span');x.textContent=c.name+' — '+c.shift;d.append(x);r.append(d)});if(!r.children.length)r.textContent='Nenhuma turma.'}
 function renderStudents(){let r=$('studentsList');r.innerHTML='';students.forEach(s=>{let d=document.createElement('div');d.className='row';let x=document.createElement('span');x.textContent=s.name+' • '+(s.registration||'Sem matrícula')+' • '+(classes.find(c=>c.id===s.class_id)?.name||'Sem turma');let details=[s.favorite_color&&'Cor: '+s.favorite_color,s.favorite_team&&'Time: '+s.favorite_team,s.favorite_music&&'Música: '+s.favorite_music,s.future_profession&&'Profissão: '+s.future_profession].filter(Boolean);if(details.length){let small=document.createElement('small');small.textContent=details.join(' | ');x.append(document.createElement('br'),small)}let b=document.createElement('button');b.className='danger delete-student';b.textContent='Excluir';b.hidden=activeRole!=='admin';b.onclick=async()=>{if(confirm('Excluir '+s.name+'?')){let {error}=await client.from('students').delete().eq('id',s.id).eq('school_id',activeSchool);if(error)alert(error.message);await refresh()}};d.append(x,b);r.append(d)});if(!r.children.length)r.textContent='Nenhum aluno cadastrado.'}
@@ -193,7 +193,7 @@ $('generateReport').onclick=()=>{let from=$('dateFrom').value,to=$('dateTo').val
 $('downloadCsv').onclick=()=>{let rows=[['Aluno','Matricula','Data','Status'],...reportData.map(a=>{let s=students.find(x=>x.id===a.student_id);return[s?.name||'',s?.registration||'',a.date,a.status]})];let csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n'),url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='faceai-relatorio.csv';a.click();URL.revokeObjectURL(url)};
 async function renderTeam(){if(activeRole!=='admin')return;let {data,error}=await client.from('school_members').select('user_id,role').eq('school_id',activeSchool);let r=$('teamList');r.innerHTML='';if(error){r.textContent='Não foi possível carregar a equipe.';return}(data||[]).forEach(m=>{let d=document.createElement('div');d.className='row';d.textContent=m.user_id===session.user.id?'Você — '+m.role:'Usuário '+m.user_id.slice(0,8)+'… — '+m.role;r.append(d)})}
 
-let faceDetector=null,cameraStream=null,cameraLoop=null,faceActive=false;
+let faceDetector=null,cameraStream=null,cameraLoop=null,faceActive=false,facePresent=false;
 function cameraMessage(text,kind=''){const el=$('cameraStatus');el.textContent=text;el.className='cameraState '+kind}
 async function startFaceTest(){
   if(faceActive)return;
@@ -214,7 +214,7 @@ async function startFaceTest(){
         ctx.strokeStyle='#35d07f';ctx.lineWidth=Math.max(3,w/240);
         ctx.strokeRect(b.xCenter*w-b.width*w/2,b.yCenter*h-b.height*h/2,b.width*w,b.height*h);
       });
-      cameraMessage(faces.length?'Rosto detectado. Nenhuma identidade foi identificada.':'Nenhum rosto detectado.',faces.length?'detected':'notdetected');
+      facePresent=faces.length>0;$('assistedAttendance').hidden=!facePresent;cameraMessage(faces.length?'Rosto detectado. Identidade não confirmada.':'Nenhum rosto detectado.',faces.length?'detected':'notdetected');
     });
     cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
     const video=$('cameraVideo');video.srcObject=cameraStream;await video.play();
@@ -229,7 +229,7 @@ async function startFaceTest(){
   }
 }
 function stopFaceTest(){
-  faceActive=false;
+  faceActive=false;facePresent=false;$('assistedAttendance').hidden=true;
   if(cameraLoop){cameraLoop.stop();cameraLoop=null}
   if(cameraStream){cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null}
   const video=$('cameraVideo');if(video)video.srcObject=null;
@@ -238,6 +238,30 @@ function stopFaceTest(){
   cameraMessage('Câmera desligada.');
   if(faceDetector){faceDetector.close();faceDetector=null}
 }
+function renderAssistedStudents(){
+  const classId=$('assistedClass')?.value||'';
+  const select=$('assistedStudent');
+  if(!select)return;
+  const previous=select.value;
+  select.innerHTML='';
+  const eligible=students.filter(s=>!classId||s.class_id===classId);
+  eligible.forEach(s=>{const option=document.createElement('option');option.value=s.id;option.textContent=s.name;select.append(option)});
+  if(eligible.some(s=>s.id===previous))select.value=previous;
+  if(!eligible.length){const option=document.createElement('option');option.value='';option.textContent='Nenhum aluno nesta turma';select.append(option)}
+}
+$('assistedClass').onchange=renderAssistedStudents;
+$('assistedDate').value=today();
+$('confirmAssisted').onclick=async()=>{
+  if(!facePresent){message('assistedMsg','A câmera não está detectando um rosto.','err');return}
+  const studentId=$('assistedStudent').value,date=$('assistedDate').value||today();
+  const student=students.find(s=>s.id===studentId);
+  if(!activeSchool||!student){message('assistedMsg','Selecione uma turma e um aluno válido.','err');return}
+  if(!confirm('Confirma presencialmente que '+student.name+' está presente?'))return;
+  const {error}=await client.from('attendance').upsert({school_id:activeSchool,student_id:studentId,date,status:'Presente',recorded_by:session.user.id},{onConflict:'student_id,date'});
+  if(error){message('assistedMsg','Não foi possível registrar: '+error.message,'err');return}
+  message('assistedMsg','Presença registrada após confirmação manual.','ok');
+  await refresh();
+};
 $('startCamera').onclick=startFaceTest;$('stopCamera').onclick=stopFaceTest;
 $('runDemo').onclick=()=>{const name=$('demoPerson').value;$('demoResult').textContent='SIMULAÇÃO: correspondência fictícia — '+name;$('demoResult').className='status ok'};
 
