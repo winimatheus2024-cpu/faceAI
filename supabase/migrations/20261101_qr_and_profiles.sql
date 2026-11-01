@@ -2,6 +2,10 @@
 -- Apply in Supabase SQL Editor only after reviewing the project backup.
 begin;
 
+-- Composite key required by the school-scoped foreign keys below.
+create unique index if not exists students_id_school_unique_idx
+  on public.students(id, school_id);
+
 create table if not exists public.teacher_profiles (
   id uuid primary key default gen_random_uuid(),
   school_id uuid not null references public.schools(id) on delete cascade,
@@ -81,7 +85,12 @@ create policy "assigned teachers view guardian profiles"
       select 1 from public.students s
       where s.id = guardian_profiles.student_id
         and s.school_id = guardian_profiles.school_id
-        and public.is_teacher_assigned_to_class(s.class_id, auth.uid())
+        and exists (
+          select 1 from public.class_teachers ct
+          where ct.school_id = guardian_profiles.school_id
+            and ct.class_id = s.class_id
+            and ct.teacher_id = auth.uid()
+        )
     )
   );
 
