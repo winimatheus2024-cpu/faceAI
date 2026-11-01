@@ -61,11 +61,7 @@ function showAuth(){$('authScreen').hidden=false;$('app').hidden=true}
 async function auth(mode){let email=$('email').value.trim(),password=$('password').value;if(!email||password.length<8){message('authMsg','Informe e-mail e senha com pelo menos 8 caracteres.','err');return}let res=mode==='in'?await client.auth.signInWithPassword({email,password}):await client.auth.signUp({email,password});if(res.error){message('authMsg',res.error.message,'err');return}if(mode==='up'&&!res.data.session)message('authMsg','Conta criada. Confirme seu e-mail e depois entre.','ok');else message('authMsg','Acesso realizado.','ok')}
 $('signIn').onclick=()=>auth('in');$('signUp').onclick=()=>auth('up');$('logout').onclick=()=>client.auth.signOut();
 async function enterApp(){
-  $('authScreen').hidden=true;
-  $('app').hidden=false;
-  $('userEmail').textContent=session.user.email;
-  await loadSchools();
-}
+ 
 
   async function loadSchools(){
   let name=prompt('Nome da escola:');if(!name?.trim())return;let {data,error}=await client.from('schools').insert({name:name.trim(),created_by:session.user.id}).select().single();if(error){alert(error.message);return}await loadSchools();activeSchool=data.id;$('schoolSelect').value=data.id;await refresh()}
