@@ -217,7 +217,14 @@ async function loadProfileSelectors(){
   if(!activeSchool)return;
   const {data:members,error}=await client.from('school_members').select('user_id').eq('school_id',activeSchool).eq('role','teacher');
   if(error){message('teacherProfileMsg','Não foi possível carregar os professores vinculados.','err');}
-  (members||[]).forEach(m=>{const o=document.createElement('option');o.value=m.user_id;o.textContent='Professor '+m.user_id.slice(0,8)+'…';teacher.append(o)});
+  const {data:profiles, error:profilesError}=await client.from('teacher_profiles').select('user_id,full_name').eq('school_id',activeSchool);
+  if(profilesError){message('teacherProfileMsg','Não foi possível carregar os nomes dos professores.','err');}
+  const names=new Map((profiles||[]).map(p=>[p.user_id,p.full_name]));
+  (members||[]).forEach((m,index)=>{
+    const o=document.createElement('option');o.value=m.user_id;
+    o.textContent=names.get(m.user_id)||('Professor sem ficha cadastrada '+(index+1));
+    teacher.append(o);
+  });
   students.forEach(st=>{const o=document.createElement('option');o.value=st.id;o.textContent=st.name;guardian.append(o)});
   await renderGuardians();
 }
