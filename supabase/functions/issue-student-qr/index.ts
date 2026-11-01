@@ -27,8 +27,16 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const appBaseUrl = Deno.env.get("APP_BASE_URL");
   const authHeader = req.headers.get("Authorization");
-  if (!url || !anon || !service || !authHeader) return json({ error: "Configuração ou autenticação ausente." }, 401);
+  if (!url || !anon || !service || !appBaseUrl || !authHeader) return json({ error: "Configuração ou autenticação ausente. Verifique APP_BASE_URL." }, 500);
+  let appOrigin: URL;
+  try {
+    appOrigin = new URL(appBaseUrl);
+    if (appOrigin.protocol !== "https:" || appOrigin.username || appOrigin.password) throw new Error("URL inválida");
+  } catch {
+    return json({ error: "APP_BASE_URL deve ser uma URL HTTPS válida." }, 500);
+  }
 
   const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
   const { data: authData, error: authError } = await userClient.auth.getUser();
@@ -49,11 +57,29 @@ Deno.serve(async (req) => {
     .eq("user_id", user.id).maybeSingle();
   if (memberError || membership?.role !== "admin") return json({ error: "Somente a direção pode emitir QR Codes." }, 403);
 
-  // Rotate any previous credential. The raw token is returned only once.
+  // Create the replacement first. Only revoke the old credential after the new one exists.
+  const random = crypto.getRandomValues(new Uint8Array(32));
+  const token = [...random].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const tokenHash = await sha256(token);
+  const { data: inserted, error: insertError } = await db.from("student_qr_credentials").insert({
+    school_id: student.school_id,
+    student_id: student.id,
+    token_hash: tokenHash,
+    created_by: user.id,
+    active: true,
+  }).select("id").single();
+  if (insertError || !inserted) return json({ error: "Não foi possível emitir o QR Code. O código anterior foi mantido." }, 500);
+
   const { error: revokeError } = await db.from("student_qr_credentials")
     .update({ active: false, revoked_at: new Date().toISOString() })
-    .eq("student_id", student.id).eq("school_id", student.school_id).eq("active", true);
-  if (revokeError) return json({ error: "Não foi possível renovar o QR Code." }, 500);
+    .eq("student_id", student.id).eq("school_id", student.school_id)
+    .eq("active", true).neq("id", inserted.id);
+
+  if (revokeError) {
+    // Best-effort rollback: do not return a QR unless rotation completed.
+    await db.from("student_qr_credentials").delete().eq("id", inserted.id);
+    return json({ error: "Não foi possível concluir a renovação. O QR anterior foi preservado sempre que possível." }, 500);
+  }
 
   const random = crypto.getRandomValues(new Uint8Array(32));
   const token = [...random].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -70,7 +96,7 @@ Deno.serve(async (req) => {
   return json({
     student: { id: student.id, name: student.name },
     token,
-    studentPageUrl: `https://faceai-plum.vercel.app/aluno-qr.html?t=${token}`,
+    studentPageUrl: `${appOrigin.origin}/aluno-qr.html?t=${token}`,
     message: "Guarde e entregue este código somente ao aluno. Ele não será exibido novamente.",
   });
 });
