@@ -68,8 +68,84 @@ async function enterApp(){
 }
 
 async function loadSchools(){
-  let name=prompt('Nome da escola:');if(!name?.trim())return;let {data,error}=await client.from('schools').insert({name:name.trim(),created_by:session.user.id}).select().single();if(error){alert(error.message);return}await loadSchools();activeSchool=data.id;$('schoolSelect').value=data.id;await refresh()}
+  const {data:members,error:memberError}=await client
+    .from('school_members')
+    .select('school_id')
+    .eq('user_id',session.user.id);
+
+  if(memberError){
+    alert('Erro ao carregar vínculos das escolas: '+memberError.message);
+    return;
+  }
+
+  const ids=(members||[]).map(member=>member.school_id);
+
+  if(!ids.length){
+    schools=[];
+    activeSchool=null;
+    $('schoolSelect').innerHTML='';
+    await refresh();
+    return;
+  }
+
+  const {data,error}=await client
+    .from('schools')
+    .select('id,name')
+    .in('id',ids);
+
+  if(error){
+    alert('Erro ao carregar escolas: '+error.message);
+    return;
+  }
+
+  schools=data||[];
+  const select=$('schoolSelect');
+  const previous=activeSchool;
+  select.innerHTML='';
+
+  schools.forEach(school=>{
+    const option=document.createElement('option');
+    option.value=school.id;
+    option.textContent=school.name;
+    select.append(option);
+  });
+
+  activeSchool=schools.some(school=>school.id===previous)
+    ? previous
+    : (schools[0]?.id||null);
+
+  if(activeSchool) select.value=activeSchool;
+  await refresh();
+}
+
+async function createSchool(){
+  const name=prompt('Nome da escola:');
+  if(!name||!name.trim())return;
+
+  const {data,error}=await client
+    .from('schools')
+    .insert({name:name.trim(),created_by:session.user.id})
+    .select('id,name')
+    .single();
+
+  if(error){
+    alert('Erro ao criar escola: '+error.message);
+    return;
+  }
+
+  // O gatilho do banco cria automaticamente o vínculo do criador como admin.
+  activeSchool=data.id;
+  await loadSchools();
+  $('schoolSelect').value=data.id;
+  activeSchool=data.id;
+  await refresh();
+}
+
 $('createSchool').onclick=createSchool;
+$('schoolSelect').onchange=async()=>{
+  activeSchool=$('schoolSelect').value||null;
+  await refresh();
+};
 async function fetchAll(table,order='created_at'){if(!activeSchool)return[];let q=client.from(table).select('*').eq('school_id',activeSchool);if(order)q=q.order(order,{ascending:false});let {data,error}=await q;if(error)throw error;return data||[]}
 async function refresh(){if(!activeSchool){$('schoolSelect').innerHTML='';$('countStudents').textContent='0';$('countClasses').textContent='0';$('countToday').textContent='0';$('studentsList').textContent='Crie uma escola para começar.';return}try{[classes,students,attendance]=await Promise.all([fetchAll('classes'),fetchAll('students','name'),fetchAll('attendance','date')]);fillSelects();renderClasses();renderStudents();renderAttendance();renderDashboard();renderTeam()}catch(e){alert('Não foi possível atualizar os dados: '+e.message)}}
 function fill(id,rows,all=false){let el=$(id),old=el.value;el.innerHTML='';if(all){let o=document.createElement('option');o.value='';o.textContent='Todas as turmas';el.append(o)}rows.forEach(x=>{let o=document.createElement('option');o.value=x.id;o.textContent=x.name;el.append(o)});if([...el.options].some(o=>o.value===old))el.value=old}
