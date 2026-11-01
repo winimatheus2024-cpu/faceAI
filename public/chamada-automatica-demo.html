@@ -20,7 +20,7 @@ button{border:0;font-weight:700;cursor:pointer}.primary{background:var(--blue);c
 .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.camera{position:relative;background:#10283d;border-radius:12px;overflow:hidden;margin-top:12px;min-height:220px;display:grid;place-items:center}
 video{display:block;width:100%;max-height:440px;object-fit:cover;transform:scaleX(-1)}canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1)}
 .placeholder{color:#dceeff;text-align:center;padding:30px}.state{padding:11px;border-radius:9px;background:#edf4fa;margin-top:10px}.state.good{background:#e9f7ef;color:#145c39}.state.warn{background:#fff8e6;color:#684d0b}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}.stat{background:#f7fafd;border:1px solid var(--line);padding:12px;border-radius:10px}.stat b{display:block;color:var(--blue);font-size:23px}.stat span{font-size:12px;color:var(--muted)}
-.event{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.event:last-child{border:0}.tag{font-size:11px;font-weight:700;background:#fff3d6;color:#805700;border-radius:20px;padding:5px 8px;white-space:nowrap}
+.event{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.event:last-child{border:0}.tag{font-size:11px;font-weight:700;background:#fff3d6;color:#805700;border-radius:20px;padding:5px 8px;white-space:nowrap}.tag.done{background:#e9f7ef;color:#145c39}.review-btn{margin-top:7px;padding:7px 10px;font-size:12px;background:#e8eef4;color:#29445b}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
 @media(max-width:560px){.wrap{padding:0 12px}.card,.notice{padding:13px}.stats{gap:6px}.stat{padding:9px}.stat b{font-size:20px}.camera{min-height:190px}}
 </style>
@@ -38,7 +38,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
 <div id="state" class="state">Aguardando autorização da câmera.</div>
 <div class="stats"><div class="stat"><b id="faces">0</b><span>Rostos detectados agora</span></div><div class="stat"><b id="events">0</b><span>Eventos nesta sessão</span></div><div class="stat"><b id="pending">0</b><span>Pendências fictícias</span></div></div>
 </section>
-<section class="card"><h2>Eventos recentes</h2><p class="muted">A detecção não informa quem é a pessoa. Cada evento precisa de conferência por um responsável antes de qualquer chamada real.</p><div id="log"><p class="muted">Nenhum evento nesta sessão.</p></div></section>
+<section class="card"><h2>Painel de revisão</h2><p class="muted">Cada detecção vira um evento pendente. O responsável pode marcar que revisou o registro, mas isso não identifica a pessoa nem altera a chamada escolar.</p><div id="log"><p class="muted">Nenhum evento nesta sessão.</p></div></section>
 <section class="card"><h2>Próximas etapas do projeto</h2><ul><li>Testar câmera e detecção em Android e iPhone.</li><li>Definir procedimento de revisão de eventos inconclusivos.</li><li>Revisar segurança, transparência, base legal e retenção de dados antes de qualquer uso com dados reais.</li><li>Manter a chamada real e o banco de dados isolados deste protótipo.</li></ul></section>
 </main>
 <footer>FaceAI • Protótipo local de detecção de presença • Nenhum dado é enviado ao Supabase</footer>
@@ -46,11 +46,15 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
 const $=id=>document.getElementById(id);
 let stream=null,detector=null,raf=0,busy=false,eventCount=0,lastEvent=0,sessionEvents=[];
 function status(text,kind=''){ $('state').textContent=text; $('state').className='state '+kind; }
+function renderEvents(){
+  $('events').textContent=eventCount;
+  $('pending').textContent=sessionEvents.filter(e=>!e.reviewed).length;
+  $('log').innerHTML=sessionEvents.length?sessionEvents.map((e,i)=>'<div class="event"><div><b>Detecção para revisão</b><div class="muted">'+e.time+' • '+e.count+' rosto(s) detectado(s)</div><span class="tag '+(e.reviewed?'done':'')+'">'+(e.reviewed?'Revisado':'Aguardando revisão')+'</span>'+(e.reviewed?'':'<br><button class="review-btn" data-review="'+i+'">Marcar como revisado</button>')+'</div><span class="tag">Sem identificação</span></div>').join(''):'<p class="muted">Nenhum evento nesta sessão.</p>';
+}
 function addEvent(count){
   const now=Date.now(); if(now-lastEvent<2500)return; lastEvent=now;
-  eventCount++; sessionEvents.unshift({time:new Date().toLocaleTimeString('pt-BR'),count});
-  $('events').textContent=eventCount; $('pending').textContent=sessionEvents.length;
-  $('log').innerHTML=sessionEvents.map(e=>'<div class="event"><div><b>Presença detectada</b><div class="muted">'+e.time+' • '+e.count+' rosto(s) no enquadramento</div></div><span class="tag">Não identificado</span></div>').join('');
+  eventCount++; sessionEvents.unshift({time:new Date().toLocaleTimeString('pt-BR'),count,reviewed:false});
+  renderEvents();
 }
 function draw(results){
   const canvas=$('overlay'),video=$('video'),ctx=canvas.getContext('2d');
@@ -87,7 +91,7 @@ function stop(){
   status('Câmera desligada. Os eventos desta sessão permanecem apenas nesta página.');
 }
 $('start').onclick=start;$('stop').onclick=stop;
-$('clear').onclick=()=>{eventCount=0;sessionEvents=[];$('events').textContent='0';$('pending').textContent='0';$('log').innerHTML='<p class="muted">Nenhum evento nesta sessão.</p>';status(stream?'Câmera ativa. Eventos da sessão foram limpos.':'Eventos da sessão foram limpos.')};
+$('log').addEventListener('click',e=>{const b=e.target.closest('[data-review]');if(!b)return;const item=sessionEvents[Number(b.dataset.review)];if(item){item.reviewed=true;renderEvents()}});\n$('clear').onclick=()=>{eventCount=0;sessionEvents=[];renderEvents();status(stream?'Câmera ativa. Eventos da sessão foram limpos.':'Eventos da sessão foram limpos.')};
 window.addEventListener('pagehide',stop);
 </script>
 </body></html>
