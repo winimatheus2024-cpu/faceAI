@@ -1,17 +1,71 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FaceAI — Leitor QR</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/config.js"></script><script src="https://unpkg.com/html5-qrcode"></script>
-<style>body{font:16px Arial;background:#f3f7fb;color:#182433;margin:0;padding:20px}.box{max-width:620px;margin:25px auto;background:white;padding:20px;border-radius:14px}button{padding:12px;border:0;border-radius:8px;background:#1769aa;color:white;font-weight:bold}#reader{margin-top:16px}.student-card{display:flex;gap:14px;align-items:center;margin-top:14px;padding:14px;border:1px solid #dce5ee;border-radius:12px;background:#fff}.student-card img{width:112px;height:132px;object-fit:cover;border-radius:10px;background:#edf4fa}.student-card h2{margin:0 0 6px}.student-card p{margin:3px 0;font-size:14px}.status{padding:12px;background:#edf4fa;border-radius:8px;margin-top:12px}</style></head><body><main class="box"><h1>Leitor de QR Code</h1><p>Entre com a conta do professor. A câmera apenas lê o QR; a presença é validada pelo servidor.</p><button id="start">Entrar e iniciar câmera</button><div id="reader"></div><div id="status" class="status">Aguardando autenticação.</div><div id="studentCard" class="student-card" hidden></div><hr><h2>Revisão da direção</h2><button id="loadReviews" type="button">Ver pendências</button><div id="reviews"></div></main>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FaceAI — Leitor QR</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/config.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<style>
+:root{color-scheme:light;--ink:#17243a;--muted:#64748b;--line:#e2e8f0;--blue:#1769aa;--blue-dark:#124f83;--surface:#f4f7fb}
+*{box-sizing:border-box}
+body{margin:0;padding:24px 16px;background:linear-gradient(135deg,#edf5ff,#f7f9fc 55%,#eef6f5);color:var(--ink);font:16px Inter,Arial,sans-serif}
+.box{max-width:760px;margin:18px auto;background:#fff;padding:clamp(18px,4vw,30px);border:1px solid #e5edf5;border-radius:22px;box-shadow:0 18px 55px #17324d12}
+header{margin-bottom:22px}header .eyebrow{color:var(--blue);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}h1{font-size:clamp(25px,5vw,34px);margin:8px 0}header p{color:var(--muted);line-height:1.55;margin:0}
+button{padding:12px 17px;border:0;border-radius:11px;background:var(--blue);color:white;font-weight:750;cursor:pointer;transition:.15s}button:hover{background:var(--blue-dark)}button:disabled{opacity:.55;cursor:wait}
+#reader{margin-top:18px;overflow:hidden;border-radius:14px}
+.status{padding:13px 15px;background:#eff6ff;border:1px solid #dbeafe;color:#23466c;border-radius:12px;margin-top:15px;line-height:1.45}
+.student-card{display:block;margin-top:20px;overflow:hidden;border:1px solid var(--line);border-radius:20px;background:#fff;box-shadow:0 12px 32px #102a4310}
+.profile-top{display:flex;align-items:center;gap:20px;padding:22px;background:linear-gradient(120deg,#eaf4ff,#f5f9ff)}
+.student-photo{width:190px;height:215px;flex:0 0 190px;object-fit:cover;border-radius:16px;background:#dce8f3;border:3px solid white;box-shadow:0 5px 18px #163b5b20}
+.photo-placeholder{display:grid;place-items:center;width:190px;height:215px;flex:0 0 190px;border-radius:16px;background:#dce8f3;color:#58718a;font-size:13px;text-align:center;padding:12px}
+.profile-name{min-width:0}.profile-kicker{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)}.profile-name h2{font-size:clamp(22px,4vw,29px);line-height:1.15;margin:7px 0 8px;overflow-wrap:anywhere}.profile-meta{margin:0;color:#52657a;font-size:14px;line-height:1.6}
+.favorites{padding:20px 22px 22px}.favorites h3{font-size:14px;margin:0 0 13px;color:#52657a;text-transform:uppercase;letter-spacing:.08em}
+.favorite-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.favorite-item{display:flex;align-items:center;gap:12px;min-width:0;padding:13px;border:1px solid #e7edf3;border-radius:14px;background:#fbfdff}
+.favorite-icon{display:grid;place-items:center;width:40px;height:40px;flex:0 0 40px;border-radius:12px;background:#edf5fc;font-size:20px}
+.favorite-copy{min-width:0}.favorite-label{display:block;margin-bottom:4px;color:#718096;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}.favorite-value{display:block;color:var(--ink);font-size:14px;font-weight:700;overflow-wrap:anywhere}
+.attendance-line{margin:0 22px 20px;padding:12px 14px;border-radius:12px;background:#effaf3;color:#17613a;font-size:14px;font-weight:700}
+hr{border:0;border-top:1px solid var(--line);margin:25px 0}h2.section-title{font-size:19px;margin:0 0 13px}
+#reviews section{margin-top:12px}
+@media(max-width:520px){body{padding:12px 9px}.box{margin:8px auto;padding:17px;border-radius:17px}.profile-top{align-items:flex-start;gap:14px;padding:16px}.student-photo,.photo-placeholder{width:145px;height:170px;flex-basis:145px}.favorite-grid{grid-template-columns:1fr}.favorites{padding:17px}.attendance-line{margin:0 17px 17px}}
+</style>
+</head>
+<body>
+<main class="box">
+<header><span class="eyebrow">FaceAI • Controle de presença</span><h1>Leitor de QR Code</h1><p>Entre com a conta do professor e inicie a câmera para identificar o aluno e registrar a presença.</p></header>
+<button id="start">Entrar e iniciar câmera</button>
+<div id="reader"></div>
+<div id="status" class="status">Aguardando autenticação.</div>
+<div id="studentCard" class="student-card" hidden></div>
+<hr>
+<h2 class="section-title">Revisão da direção</h2>
+<button id="loadReviews" type="button">Ver pendências</button>
+<div id="reviews"></div>
+</main>
 <script>
 const statusEl=document.getElementById('status');let client,scanner,locked=false;
 function say(t){statusEl.textContent=t}
 function showStudent(student,attendance){
  const card=document.getElementById('studentCard');card.replaceChildren();
  if(!student){card.hidden=true;return}
- if(student.photo_url){const img=document.createElement('img');img.src=student.photo_url;img.alt='Foto de identificação de '+student.name;card.append(img)}
- const info=document.createElement('div'),title=document.createElement('h2');title.textContent=student.name;info.append(title);
- [['Matrícula',student.registration],['Turma',student.class_name],['Cor preferida',student.favorite_color],['Clube do coração',student.favorite_team],['Artista favorito',student.favorite_music],['Profissão futura',student.future_profession],['Comida preferida',student.food_preference],['Lazer preferido',student.leisure_preference],['Data',attendance?.date],['Chamada',attendance?.status||'Presente']].forEach(([label,value])=>{if(value){const p=document.createElement('p');p.textContent=label+': '+value;info.append(p)}});
- card.append(info);card.hidden=false;
+ const top=document.createElement('div');top.className='profile-top';
+ if(student.photo_url){const img=document.createElement('img');img.className='student-photo';img.src=student.photo_url;img.alt='Foto de identificação de '+student.name;top.append(img)}
+ else{const placeholder=document.createElement('div');placeholder.className='photo-placeholder';placeholder.textContent='Foto não cadastrada';top.append(placeholder)}
+ const info=document.createElement('div');info.className='profile-name';
+ const kicker=document.createElement('span');kicker.className='profile-kicker';kicker.textContent='Perfil do aluno';
+ const title=document.createElement('h2');title.textContent=student.name||'Aluno';
+ const meta=document.createElement('p');meta.className='profile-meta';meta.textContent=[student.registration?'Matrícula: '+student.registration:null,student.class_name?'Turma: '+student.class_name:null].filter(Boolean).join(' • ')||'Dados cadastrais';
+ info.append(kicker,title,meta);top.append(info);card.append(top);
+ const section=document.createElement('section');section.className='favorites';
+ const heading=document.createElement('h3');heading.textContent='Preferências do aluno';section.append(heading);
+ const grid=document.createElement('div');grid.className='favorite-grid';
+ const items=[['🎨','Cor favorita',student.favorite_color],['❤️','Time do coração',student.favorite_team],['🍽️','Comida favorita',student.food_preference],['🎯','Lazer favorito',student.leisure_preference]];
+ items.forEach(([emoji,label,value])=>{const item=document.createElement('div');item.className='favorite-item';const icon=document.createElement('span');icon.className='favorite-icon';icon.textContent=emoji;const copy=document.createElement('div');copy.className='favorite-copy';const name=document.createElement('span');name.className='favorite-label';name.textContent=label;const val=document.createElement('span');val.className='favorite-value';val.textContent=value||'Não informado';copy.append(name,val);item.append(icon,copy);grid.append(item)});
+ section.append(grid);card.append(section);
+ const attendanceLine=document.createElement('p');attendanceLine.className='attendance-line';attendanceLine.textContent=attendance?'Chamada: '+(attendance.status||'Presente')+' • '+(attendance.date||''):'Aguardando revisão da direção — presença ainda não confirmada.';card.append(attendanceLine);
+ card.hidden=false;
 }
 async function start(){
  if(!window.FACEAI_CONFIG?.url||!window.FACEAI_CONFIG?.anonKey){say('Configuração do Supabase ausente.');return}
@@ -38,13 +92,12 @@ async function start(){
   });say('Câmera ativa. Aponte para o QR Code do aluno.')}
  catch(e){say('Não foi possível abrir a câmera: '+e)}
 }
-
 async function loadReviews(){
  const host=document.getElementById('reviews');host.textContent='Carregando…';
  if(!client){host.textContent='Entre primeiro pelo botão acima.';return}
  const {data,error}=await client.functions.invoke('review-qr-attendance',{body:{action:'list'}});
  if(error||data?.error){host.textContent=data?.error||error?.message||'Falha ao carregar.';return}
- host.innerHTML='';
+ host.replaceChildren();
  if(!data.reviews?.length){host.textContent='Nenhuma pendência.';return}
  data.reviews.forEach(r=>{
   const card=document.createElement('section');card.className='status';
@@ -66,4 +119,6 @@ async function loadReviews(){
 }
 document.getElementById('loadReviews').onclick=loadReviews;
 document.getElementById('start').onclick=start;
-</script></body></html>
+</script>
+</body>
+</html>
