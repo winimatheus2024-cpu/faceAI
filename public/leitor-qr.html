@@ -10,7 +10,7 @@ function showStudent(student,attendance){
  if(!student){card.hidden=true;return}
  if(student.photo_url){const img=document.createElement('img');img.src=student.photo_url;img.alt='Foto de identificação de '+student.name;card.append(img)}
  const info=document.createElement('div'),title=document.createElement('h2');title.textContent=student.name;info.append(title);
- [['Matrícula',student.registration],['Turma',student.class_name],['Data',attendance?.date],['Chamada',attendance?.status||'Presente']].forEach(([label,value])=>{if(value){const p=document.createElement('p');p.textContent=label+': '+value;info.append(p)}});
+ [['Matrícula',student.registration],['Turma',student.class_name],['Comida preferida',student.food_preference],['Lazer preferido',student.leisure_preference],['Data',attendance?.date],['Chamada',attendance?.status||'Presente']].forEach(([label,value])=>{if(value){const p=document.createElement('p');p.textContent=label+': '+value;info.append(p)}});
  card.append(info);card.hidden=false;
 }
 async function start(){
