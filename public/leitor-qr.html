@@ -1,10 +1,18 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FaceAI — Leitor QR</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/config.js"></script><script src="https://unpkg.com/html5-qrcode"></script>
-<style>body{font:16px Arial;background:#f3f7fb;color:#182433;margin:0;padding:20px}.box{max-width:620px;margin:25px auto;background:white;padding:20px;border-radius:14px}button{padding:12px;border:0;border-radius:8px;background:#1769aa;color:white;font-weight:bold}#reader{margin-top:16px}.status{padding:12px;background:#edf4fa;border-radius:8px;margin-top:12px}</style></head><body><main class="box"><h1>Leitor de QR Code</h1><p>Entre com a conta do professor. A câmera apenas lê o QR; a presença é validada pelo servidor.</p><button id="start">Entrar e iniciar câmera</button><div id="reader"></div><div id="status" class="status">Aguardando autenticação.</div><hr><h2>Revisão da direção</h2><button id="loadReviews" type="button">Ver pendências</button><div id="reviews"></div></main>
+<style>body{font:16px Arial;background:#f3f7fb;color:#182433;margin:0;padding:20px}.box{max-width:620px;margin:25px auto;background:white;padding:20px;border-radius:14px}button{padding:12px;border:0;border-radius:8px;background:#1769aa;color:white;font-weight:bold}#reader{margin-top:16px}.student-card{display:flex;gap:14px;align-items:center;margin-top:14px;padding:14px;border:1px solid #dce5ee;border-radius:12px;background:#fff}.student-card img{width:112px;height:132px;object-fit:cover;border-radius:10px;background:#edf4fa}.student-card h2{margin:0 0 6px}.student-card p{margin:3px 0;font-size:14px}.status{padding:12px;background:#edf4fa;border-radius:8px;margin-top:12px}</style></head><body><main class="box"><h1>Leitor de QR Code</h1><p>Entre com a conta do professor. A câmera apenas lê o QR; a presença é validada pelo servidor.</p><button id="start">Entrar e iniciar câmera</button><div id="reader"></div><div id="status" class="status">Aguardando autenticação.</div><div id="studentCard" class="student-card" hidden></div><hr><h2>Revisão da direção</h2><button id="loadReviews" type="button">Ver pendências</button><div id="reviews"></div></main>
 <script>
 const statusEl=document.getElementById('status');let client,scanner,locked=false;
 function say(t){statusEl.textContent=t}
+function showStudent(student,attendance){
+ const card=document.getElementById('studentCard');card.replaceChildren();
+ if(!student){card.hidden=true;return}
+ if(student.photo_url){const img=document.createElement('img');img.src=student.photo_url;img.alt='Foto de identificação de '+student.name;card.append(img)}
+ const info=document.createElement('div'),title=document.createElement('h2');title.textContent=student.name;info.append(title);
+ [['Matrícula',student.registration],['Turma',student.class_name],['Data',attendance?.date],['Chamada',attendance?.status||'Presente']].forEach(([label,value])=>{if(value){const p=document.createElement('p');p.textContent=label+': '+value;info.append(p)}});
+ card.append(info);card.hidden=false;
+}
 async function start(){
  if(!window.FACEAI_CONFIG?.url||!window.FACEAI_CONFIG?.anonKey){say('Configuração do Supabase ausente.');return}
  client=window.supabase.createClient(FACEAI_CONFIG.url,FACEAI_CONFIG.anonKey);
@@ -21,9 +29,9 @@ async function start(){
       try{if(error?.context){const response=error.context.clone();const payload=await response.json();if(payload?.error)detail=payload.error;}}catch{}
       say(detail);
     }
-    else if(data.status==='already_recorded'){say(data.message||'Presença já registrada hoje.');}
-    else if(data.status==='pending_review'){say(data.message||'Solicitação enviada para revisão da direção. A presença ainda não foi confirmada.');}
-    else if(data.status==='recorded'&&data.student&&data.attendance){say('Presença registrada: '+data.student.name+' — '+data.attendance.date);}
+    else if(data.status==='already_recorded'){say(data.message||'Presença já registrada hoje.');showStudent(data.student,data.attendance);}
+    else if(data.status==='pending_review'){say(data.message||'Solicitação enviada para revisão da direção. A presença ainda não foi confirmada.');showStudent(data.student,null);}
+    else if(data.status==='recorded'&&data.student&&data.attendance){say('Presença registrada: '+data.student.name+' — '+data.attendance.date);showStudent(data.student,data.attendance);}
     else{say('Resposta inesperada do servidor. A presença não foi confirmada; consulte a direção.');}
    }catch(e){say('Erro: '+e.message)}
    setTimeout(()=>{locked=false;say('Pronto para ler o próximo QR Code.');},2500);
