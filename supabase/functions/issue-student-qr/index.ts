@@ -2,16 +2,33 @@
 // Requires SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+const allowedOrigin = (origin: string | null) => {
+  if (!origin) return null;
+  try {
+    const parsed = new URL(origin);
+    const host = parsed.hostname.toLowerCase();
+    const isProduction = parsed.protocol === "https:" && host === "faceai-plum.vercel.app";
+    const isFaceAiPreview = parsed.protocol === "https:" &&
+      /^faceai-[a-z0-9-]+-wini9\\.vercel\\.app$/.test(host);
+    return isProduction || isFaceAiPreview ? origin : null;
+  } catch {
+    return null;
+  }
+};
+const corsHeaders = (origin: string | null) => {
+  const allowed = allowedOrigin(origin);
+  return {
+    ...(allowed ? { "Access-Control-Allow-Origin": allowed } : {}),
+    "Vary": "Origin",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
 };
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...cors, "Content-Type": "application/json" },
+    headers: { ...corsHeaders(req.headers.get("Origin")), "Content-Type": "application/json" },
   });
 
 const sha256 = async (value: string) => {
@@ -21,7 +38,7 @@ const sha256 = async (value: string) => {
 };
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req.headers.get("Origin")) });
   if (req.method !== "POST") return json({ error: "Método não permitido." }, 405);
 
   const url = Deno.env.get("SUPABASE_URL");
