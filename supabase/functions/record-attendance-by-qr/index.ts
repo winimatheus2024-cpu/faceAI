@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
         attendance_date: date, reason: "student_without_class", status: "pending",
       });
       if (queueError && queueError.code !== "23505") return json({ error: "Não foi possível enviar para revisão." }, 500);
-      return json({ status: "pending_review", student: { id: student.id, name: student.name },
+      return json({ status: "pending_review", student: studentCard,
         message: "Aluno sem turma vinculada. Solicitação enviada à direção para revisão." });
     }
     const { data: assignment, error: assignmentError } = await db
@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
         attendance_date: date, reason: "teacher_not_assigned", status: "pending",
       });
       if (queueError && queueError.code !== "23505") return json({ error: "Não foi possível enviar para revisão." }, 500);
-      return json({ status: "pending_review", student: { id: student.id, name: student.name },
+      return json({ status: "pending_review", student: studentCard,
         message: "Professor não vinculado à turma. Solicitação enviada à direção para revisão." });
     }
   }
@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
   if (existingError) return json({ error: "Não foi possível verificar a chamada." }, 500);
   if (existing) return json({
     status: "already_recorded",
-    student: { id: student.id, name: student.name },
+    student: studentCard,
     attendance: existing,
     message: "A chamada deste aluno já foi registrada hoje.",
   }, 200);
@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
 
   return json({
     status: "recorded",
-    student: { id: student.id, name: student.name },
+    student: studentCard,
     attendance,
     message: "Presença registrada.",
   });
