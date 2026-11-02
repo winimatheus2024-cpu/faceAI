@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Meu QR Code — FaceAI</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f6fb;color:#172033;font-family:system-ui,-apple-system,Segoe UI,sans-serif;padding:20px}
+    main{width:min(100%,420px);background:white;border-radius:22px;padding:28px;text-align:center;box-shadow:0 12px 40px #17203318}
+    h1{font-size:1.5rem;margin:0 0 8px}p{color:#536078;line-height:1.5}#qrcode{display:grid;place-items:center;min-height:260px;margin:22px auto}#qrcode img,#qrcode canvas{max-width:100%;height:auto!important}
+    .hint{font-size:.9rem;background:#f0f5ff;padding:12px;border-radius:12px}.error{color:#b42318}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Meu QR Code de presença</h1>
+  <p>Mostre este código ao professor para registrar sua presença.</p>
+  <div id="qrcode" aria-label="QR Code individual do aluno"></div>
+  <p class="hint">Aumente o brilho da tela e mantenha o código visível durante a leitura. Não compartilhe este link.</p>
+  <p id="status" role="status"></p>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" referrerpolicy="no-referrer"></script>
+<script>
+(() => {
+  const status = document.getElementById("status");
+  const token = new URLSearchParams(location.search).get("t") || "";
+  // Remove the bearer token from the address bar/history after reading it.
+  history.replaceState(null, "", location.pathname);
+  if (!/^[a-f0-9]{64}$/i.test(token)) {
+    status.className = "error";
+    status.textContent = "Link inválido. Solicite à direção um novo QR Code.";
+    return;
+  }
+  if (typeof QRCode === "undefined") {
+    status.className = "error";
+    status.textContent = "Não foi possível carregar o QR Code. Verifique a conexão e tente novamente.";
+    return;
+  }
+  new QRCode(document.getElementById("qrcode"), {
+    text: token, width: 240, height: 240,
+    colorDark: "#111827", colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.M
+  });
+  status.textContent = "QR Code pronto.";
+})();
+</script>
+</body>
+</html>
