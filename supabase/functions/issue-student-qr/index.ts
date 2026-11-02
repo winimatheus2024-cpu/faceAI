@@ -25,10 +25,10 @@ const corsHeaders = (origin: string | null) => {
   };
 };
 
-const json = (body: unknown, status = 200) =>
+const json = (body: unknown, status = 200, origin: string | null = null) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders(req.headers.get("Origin")), "Content-Type": "application/json" },
+    headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
   });
 
 const sha256 = async (value: string) => {
@@ -38,41 +38,42 @@ const sha256 = async (value: string) => {
 };
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req.headers.get("Origin")) });
-  if (req.method !== "POST") return json({ error: "Método não permitido." }, 405);
+  const respond = (body: unknown, status = 200) => json(body, status, req.headers.get("Origin"));
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
+  if (req.method !== "POST") return respond({ error: "Método não permitido." }, 405);
 
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const appBaseUrl = Deno.env.get("APP_BASE_URL");
   const authHeader = req.headers.get("Authorization");
-  if (!url || !anon || !service || !appBaseUrl || !authHeader) return json({ error: "Configuração ou autenticação ausente. Verifique APP_BASE_URL." }, 500);
+  if (!url || !anon || !service || !appBaseUrl || !authHeader) return respond({ error: "Configuração ou autenticação ausente. Verifique APP_BASE_URL." }, 500);
   let appOrigin: URL;
   try {
     appOrigin = new URL(appBaseUrl);
     if (appOrigin.protocol !== "https:" || appOrigin.username || appOrigin.password) throw new Error("URL inválida");
   } catch {
-    return json({ error: "APP_BASE_URL deve ser uma URL HTTPS válida." }, 500);
+    return respond({ error: "APP_BASE_URL deve ser uma URL HTTPS válida." }, 500);
   }
 
   const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
   const { data: authData, error: authError } = await userClient.auth.getUser();
   const user = authData.user;
-  if (authError || !user) return json({ error: "Sessão inválida." }, 401);
+  if (authError || !user) return respond({ error: "Sessão inválida." }, 401);
 
   let body: { student_id?: string };
-  try { body = await req.json(); } catch { return json({ error: "JSON inválido." }, 400); }
-  if (!body.student_id || !/^[0-9a-f-]{36}$/i.test(body.student_id)) return json({ error: "Aluno inválido." }, 400);
+  try { body = await req.json(); } catch { return respond({ error: "JSON inválido." }, 400); }
+  if (!body.student_id || !/^[0-9a-f-]{36}$/i.test(body.student_id)) return respond({ error: "Aluno inválido." }, 400);
 
   const db = createClient(url, service, { auth: { persistSession: false } });
   const { data: student, error: studentError } = await db
     .from("students").select("id, school_id, name").eq("id", body.student_id).maybeSingle();
-  if (studentError || !student) return json({ error: "Aluno não encontrado." }, 404);
+  if (studentError || !student) return respond({ error: "Aluno não encontrado." }, 404);
 
   const { data: membership, error: memberError } = await db
     .from("school_members").select("role").eq("school_id", student.school_id)
     .eq("user_id", user.id).maybeSingle();
-  if (memberError || membership?.role !== "admin") return json({ error: "Somente a direção pode emitir QR Codes." }, 403);
+  if (memberError || membership?.role !== "admin") return respond({ error: "Somente a direção pode emitir QR Codes." }, 403);
 
   // Create the replacement first. Only revoke the old credential after the new one exists.
   const random = crypto.getRandomValues(new Uint8Array(32));
@@ -85,7 +86,7 @@ Deno.serve(async (req) => {
     created_by: user.id,
     active: true,
   }).select("id").single();
-  if (insertError || !inserted) return json({ error: "Não foi possível emitir o QR Code. O código anterior foi mantido." }, 500);
+  if (insertError || !inserted) return respond({ error: "Não foi possível emitir o QR Code. O código anterior foi mantido." }, 500);
 
   const { error: revokeError } = await db.from("student_qr_credentials")
     .update({ active: false, revoked_at: new Date().toISOString() })
@@ -95,10 +96,10 @@ Deno.serve(async (req) => {
   if (revokeError) {
     // Best-effort rollback: do not return a QR unless rotation completed.
     await db.from("student_qr_credentials").delete().eq("id", inserted.id);
-    return json({ error: "Não foi possível concluir a renovação. O QR anterior foi preservado sempre que possível." }, 500);
+    return respond({ error: "Não foi possível concluir a renovação. O QR anterior foi preservado sempre que possível." }, 500);
   }
 
-  return json({
+  return respond({
     student: { id: student.id, name: student.name },
     token,
     studentPageUrl: `${appOrigin.origin}/aluno-qr.html?t=${token}`,
