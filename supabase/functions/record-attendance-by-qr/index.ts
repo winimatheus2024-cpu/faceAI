@@ -50,9 +50,18 @@ Deno.serve(async (req) => {
   if (memberError || !membership) return json({ error: "Professor não pertence a esta escola." }, 403);
 
   const { data: student, error: studentError } = await db
-    .from("students").select("id, name, class_id, school_id")
+    .from("students").select("id, name, class_id, school_id, registration, photo_path")
     .eq("id", credential.student_id).eq("school_id", credential.school_id).maybeSingle();
   if (studentError || !student) return json({ error: "Aluno não encontrado." }, 404);
+  let photoUrl: string | null = null;
+  if (student.photo_path) {
+    const { data: signed } = await db.storage.from("student-photos").createSignedUrl(student.photo_path, 300);
+    photoUrl = signed?.signedUrl || null;
+  }
+  const { data: classRow } = student.class_id
+    ? await db.from("classes").select("name").eq("id", student.class_id).eq("school_id", student.school_id).maybeSingle()
+    : { data: null };
+  const studentCard = { id: student.id, name: student.name, registration: student.registration, class_name: classRow?.name || null, photo_url: photoUrl };
 
   if (membership.role !== "admin") {
     if (!student.class_id) {
