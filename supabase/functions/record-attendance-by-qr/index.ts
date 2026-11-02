@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
   if (memberError || !membership) return json({ error: "Professor não pertence a esta escola." }, 403);
 
   const { data: student, error: studentError } = await db
-    .from("students").select("id, name, class_id, school_id, registration, photo_path")
+    .from("students").select("id, name, class_id, school_id, registration, photo_path, food_preference, leisure_preference")
     .eq("id", credential.student_id).eq("school_id", credential.school_id).maybeSingle();
   if (studentError || !student) return json({ error: "Aluno não encontrado." }, 404);
   let photoUrl: string | null = null;
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
   const { data: classRow } = student.class_id
     ? await db.from("classes").select("name").eq("id", student.class_id).eq("school_id", student.school_id).maybeSingle()
     : { data: null };
-  const studentCard = { id: student.id, name: student.name, registration: student.registration, class_name: classRow?.name || null, photo_url: photoUrl };
+  const studentCard = { id: student.id, name: student.name, registration: student.registration, class_name: classRow?.name || null, food_preference: student.food_preference, leisure_preference: student.leisure_preference, photo_url: photoUrl };
 
   if (membership.role !== "admin") {
     if (!student.class_id) {
