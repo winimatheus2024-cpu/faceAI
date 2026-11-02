@@ -15,7 +15,7 @@ async function start(){
  try{await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},async(decoded)=>{
    if(locked)return;locked=true;say('QR lido. Validando presença…');
    try{
-    const {data,error}=await client.functions.invoke('record-attendance-by-qr',{body:{token:decoded.trim()}});
+    const {data,error}=await client.functions.invoke('record-attendance-by-qr',{headers:{Authorization:`Bearer ${session.access_token}`},body:{token:decoded.trim()}});
     if(error||data?.error){say(data?.error||error?.message||'Falha ao validar QR.');}
     else if(data.status==='already_recorded'){say(data.message||'Presença já registrada hoje.');}
     else if(data.status==='pending_review'){say(data.message||'Solicitação enviada para revisão da direção. A presença ainda não foi confirmada.');}
