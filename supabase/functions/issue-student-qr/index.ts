@@ -9,7 +9,7 @@ const allowedOrigin = (origin: string | null) => {
     const host = parsed.hostname.toLowerCase();
     const isProduction = parsed.protocol === "https:" && host === "faceai-plum.vercel.app";
     const isFaceAiPreview = parsed.protocol === "https:" &&
-      /^faceai-[a-z0-9-]+-wini9\\.vercel\\.app$/.test(host);
+      /^faceai-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
     return isProduction || isFaceAiPreview ? origin : null;
   } catch {
     return null;
@@ -39,7 +39,7 @@ const sha256 = async (value: string) => {
 
 Deno.serve(async (req) => {
   const respond = (body: unknown, status = 200) => json(body, status, req.headers.get("Origin"));
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req.headers.get("Origin")) });
   if (req.method !== "POST") return respond({ error: "Método não permitido." }, 405);
 
   const url = Deno.env.get("SUPABASE_URL");
