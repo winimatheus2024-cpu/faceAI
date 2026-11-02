@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FaceAI — Leitor QR</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/config.js"></script><script src="https://unpkg.com/html5-qrcode"></script>
+<style>body{font:16px Arial;background:#f3f7fb;color:#182433;margin:0;padding:20px}.box{max-width:620px;margin:25px auto;background:white;padding:20px;border-radius:14px}button{padding:12px;border:0;border-radius:8px;background:#1769aa;color:white;font-weight:bold}#reader{margin-top:16px}.student-card{display:flex;gap:14px;align-items:center;margin-top:14px;padding:14px;border:1px solid #dce5ee;border-radius:12px;background:#fff}.student-card img{width:112px;height:132px;object-fit:cover;border-radius:10px;background:#edf4fa}.student-card h2{margin:0 0 6px}.student-card p{margin:3px 0;font-size:14px}.status{padding:12px;background:#edf4fa;border-radius:8px;margin-top:12px}</style></head><body><main class="box"><h1>Leitor de QR Code</h1><p>Entre com a conta do professor. A câmera apenas lê o QR; a presença é validada pelo servidor.</p><button id="start">Entrar e iniciar câmera</button><div id="reader"></div><div id="status" class="status">Aguardando autenticação.</div><div id="studentCard" class="student-card" hidden></div><hr><h2>Revisão da direção</h2><button id="loadReviews" type="button">Ver pendências</button><div id="reviews"></div></main>
+<script>
+const statusEl=document.getElementById('status');let client,scanner,locked=false;
+function say(t){statusEl.textContent=t}
+function showStudent(student,attendance){
+ const card=document.getElementById('studentCard');card.replaceChildren();
+ if(!student){card.hidden=true;return}
+ if(student.photo_url){const img=document.createElement('img');img.src=student.photo_url;img.alt='Foto de identificação de '+student.name;card.append(img)}
+ const info=document.createElement('div'),title=document.createElement('h2');title.textContent=student.name;info.append(title);
+ [['Matrícula',student.registration],['Turma',student.class_name],['Cor preferida',student.favorite_color],['Clube do coração',student.favorite_team],['Artista favorito',student.favorite_music],['Profissão futura',student.future_profession],['Comida preferida',student.food_preference],['Lazer preferido',student.leisure_preference],['Data',attendance?.date],['Chamada',attendance?.status||'Presente']].forEach(([label,value])=>{if(value){const p=document.createElement('p');p.textContent=label+': '+value;info.append(p)}});
+ card.append(info);card.hidden=false;
+}
+async function start(){
+ if(!window.FACEAI_CONFIG?.url||!window.FACEAI_CONFIG?.anonKey){say('Configuração do Supabase ausente.');return}
+ client=window.supabase.createClient(FACEAI_CONFIG.url,FACEAI_CONFIG.anonKey);
+ const {data:{session},error}=await client.auth.getSession();
+ if(error||!session){say('Faça login no FaceAI em outra aba e abra novamente este leitor.');return}
+ if(!window.Html5Qrcode){say('Leitor não carregou. Verifique a conexão.');return}
+ scanner=new Html5Qrcode('reader');
+ try{await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},async(decoded)=>{
+   if(locked)return;locked=true;say('QR lido. Validando presença…');
+   try{
+    const {data,error}=await client.functions.invoke('record-attendance-by-qr',{headers:{Authorization:`Bearer ${session.access_token}`},body:{token:decoded.trim()}});
+    if(error||data?.error){
+      let detail=data?.error||error?.message||'Falha ao validar QR.';
+      try{if(error?.context){const response=error.context.clone();const payload=await response.json();if(payload?.error)detail=payload.error;}}catch{}
+      say(detail);
+    }
+    else if(data.status==='already_recorded'){say(data.message||'Presença já registrada hoje.');showStudent(data.student,data.attendance);}
+    else if(data.status==='pending_review'){say(data.message||'Solicitação enviada para revisão da direção. A presença ainda não foi confirmada.');showStudent(data.student,null);}
+    else if(data.status==='recorded'&&data.student&&data.attendance){say('Presença registrada: '+data.student.name+' — '+data.attendance.date);showStudent(data.student,data.attendance);}
+    else{say('Resposta inesperada do servidor. A presença não foi confirmada; consulte a direção.');}
+   }catch(e){say('Erro: '+e.message)}
+   setTimeout(()=>{locked=false;say('Pronto para ler o próximo QR Code.');},2500);
+  });say('Câmera ativa. Aponte para o QR Code do aluno.')}
+ catch(e){say('Não foi possível abrir a câmera: '+e)}
+}
+
+async function loadReviews(){
+ const host=document.getElementById('reviews');host.textContent='Carregando…';
+ if(!client){host.textContent='Entre primeiro pelo botão acima.';return}
+ const {data,error}=await client.functions.invoke('review-qr-attendance',{body:{action:'list'}});
+ if(error||data?.error){host.textContent=data?.error||error?.message||'Falha ao carregar.';return}
+ host.innerHTML='';
+ if(!data.reviews?.length){host.textContent='Nenhuma pendência.';return}
+ data.reviews.forEach(r=>{
+  const card=document.createElement('section');card.className='status';
+  const name=r.students?.name||'Aluno';
+  const reason=r.reason==='student_without_class'?'Aluno sem turma':'Professor sem vínculo com a turma';
+  const title=document.createElement('p');title.textContent=name+' — '+r.attendance_date+' — '+reason;
+  card.appendChild(title);
+  ['approve','reject'].forEach(decision=>{
+   const b=document.createElement('button');b.type='button';b.textContent=decision==='approve'?'Aprovar presença':'Rejeitar';
+   b.style.marginRight='8px';b.onclick=async()=>{
+    b.disabled=true;
+    const result=await client.functions.invoke('review-qr-attendance',{body:{action:'decide',review_id:r.id,decision}});
+    if(result.error||result.data?.error){say(result.data?.error||result.error?.message||'Falha ao revisar.');b.disabled=false;}
+    else{say(result.data.message);loadReviews();}
+   };card.appendChild(b);
+  });
+  host.appendChild(card);
+ });
+}
+document.getElementById('loadReviews').onclick=loadReviews;
+document.getElementById('start').onclick=start;
+</script></body></html>
