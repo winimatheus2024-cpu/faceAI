@@ -77,7 +77,12 @@ Deno.serve(async (req) => {
   const { data: membership, error: memberError } = await db
     .from("school_members").select("role").eq("school_id", student.school_id)
     .eq("user_id", user.id).maybeSingle();
-  if (memberError || membership?.role !== "admin") return respond({ error: "Somente a direção pode emitir QR Codes." }, 403);
+  const { data: studentAccount, error: studentAccountError } = await db
+    .from("student_accounts").select("student_id").eq("school_id", student.school_id)
+    .eq("student_id", student.id).eq("user_id", user.id).maybeSingle();
+  const isAdmin = !memberError && membership?.role === "admin";
+  const isOwnStudent = !studentAccountError && studentAccount?.student_id === student.id;
+  if (!isAdmin && !isOwnStudent) return respond({ error: "Somente a direção ou o próprio aluno pode emitir este QR Code." }, 403);
 
   // Create the replacement first. Only revoke the old credential after the new one exists.
   const random = crypto.getRandomValues(new Uint8Array(32));
