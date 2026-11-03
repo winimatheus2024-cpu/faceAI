@@ -30,7 +30,7 @@ h2{font-size:18px;margin:0 0 12px}.actions{display:flex;gap:8px;flex-wrap:wrap;m
 <div class="actions"><button class="primary" id="signIn">Entrar</button><button class="secondary" id="signUp">Criar conta</button></div>
 <div id="authMsg" class="status">Configure o Supabase seguindo o README para ativar o acesso online.</div>
 </div></section>
-<section id="studentPortal" class="login" hidden><div class="loginbox" style="width:min(620px,100%)"><div class="logo">◎ FaceAI</div><h1>Área do aluno</h1><p class="muted" id="studentWelcome">Seus dados escolares</p><div class="card"><h2>Minha turma</h2><p id="studentClassName">Carregando...</p></div><div class="card"><h2>Meus dados</h2><p id="studentDetails"></p></div><div class="card"><h2>Minha frequência</h2><div id="studentAttendance"></div></div><button class="secondary" id="studentLogout">Sair</button></div></section>
+<section id="studentPortal" class="login" hidden><div class="loginbox" style="width:min(620px,100%)"><div class="logo">◎ FaceAI</div><h1>Área do aluno</h1><p class="muted" id="studentWelcome">Seus dados escolares</p><div class="card"><h2>Minha turma</h2><p id="studentClassName">Carregando...</p></div><div class="card"><h2>Minhas informações pessoais</h2><div id="studentDetails"></div><div id="studentPreferences" class="muted"></div></div><div class="card"><h2>Meu QR Code</h2><p class="muted">Gere seu código individual e apresente-o ao professor na chamada. Não compartilhe o código.</p><button class="primary" id="studentGenerateQr" type="button">Gerar meu QR Code</button><p class="muted" id="studentQrStatus" aria-live="polite"></p></div><div class="card"><h2>Minha frequência</h2><div id="studentAttendance"></div></div><button class="secondary" id="studentLogout">Sair</button></div></section>
 <div id="app" hidden>
 <header><div class="wrap top"><div class="logo" style="color:white">◎</div><div><h1>FaceAI</h1><p>Gestão escolar online</p></div><div class="spacer"></div><span class="user" id="userEmail"></span><button class="secondary" id="logout">Sair</button></div></header>
 <main class="wrap">
@@ -93,10 +93,10 @@ async function enterApp(){
   $('studentPortal').hidden=true;$('app').hidden=false;$('userEmail').textContent=session.user.email;await loadSchools();
 }
 async function loadStudentPortal(account){
-  const {data:student,error}=await client.from('students').select('id,name,registration,class_id,school_id').eq('id',account.student_id).eq('school_id',account.school_id).single();
+  const {data:student,error}=await client.from('students').select('id,name,registration,class_id,school_id,favorite_color,favorite_team,favorite_music,future_profession,food_preference,leisure_preference').eq('id',account.student_id).eq('school_id',account.school_id).single();
   if(error||!student){message('authMsg','Não foi possível carregar seus dados escolares.','err');await client.auth.signOut();return}
-  $('studentWelcome').textContent='Olá, '+student.name+'!';
-  $('studentDetails').textContent='Matrícula: '+(student.registration||'Não informada')+' • Usuário: '+account.username;
+  $('studentWelcome').textContent='Olá, '+student.name+'!';$('studentGenerateQr').onclick=()=>generateStudentQr(student);
+  const details=[['Nome',student.name],['Matrícula',student.registration||'Não informada'],['Usuário',account.username]];const detailRoot=$('studentDetails');detailRoot.replaceChildren();details.forEach(([label,value])=>{const p=document.createElement('p');p.textContent=label+': '+value;detailRoot.append(p)});const prefs=[['Cor preferida',student.favorite_color],['Time do coração',student.favorite_team],['Música preferida',student.favorite_music],['Profissão futura',student.future_profession],['Comida preferida',student.food_preference],['Lazer preferido',student.leisure_preference]];const prefRoot=$('studentPreferences');prefRoot.replaceChildren();prefs.forEach(([label,value])=>{const p=document.createElement('p');p.textContent=label+': '+(value||'Não informado');prefRoot.append(p)});
   if(student.class_id){const {data:cl}=await client.from('classes').select('name,shift').eq('id',student.class_id).eq('school_id',account.school_id).maybeSingle();$('studentClassName').textContent=cl?cl.name+' — '+cl.shift:'Turma não encontrada';}else $('studentClassName').textContent='Você ainda não está vinculado a uma turma.';
   const {data:records,error:attendanceError}=await client.from('attendance').select('date,status').eq('student_id',student.id).eq('school_id',account.school_id).order('date',{ascending:false}).limit(60);
   const root=$('studentAttendance');root.innerHTML='';
@@ -104,7 +104,7 @@ async function loadStudentPortal(account){
   if(!records?.length){root.textContent='Nenhum registro de frequência.';return}
   records.forEach(record=>{const p=document.createElement('p');p.className='row';const d=document.createElement('span');d.textContent=new Date(record.date+'T12:00:00').toLocaleDateString('pt-BR');const st=document.createElement('b');st.textContent=record.status;p.append(d,st);root.append(p)});
 }
-$('studentLogout').onclick=()=>client.auth.signOut();
+async function generateStudentQr(student){const button=$('studentGenerateQr'),status=$('studentQrStatus');if(!confirm('Gerar um novo QR Code? O código anterior deixará de funcionar.'))return;button.disabled=true;status.textContent='Gerando seu QR Code...';try{const {data,error}=await client.functions.invoke('issue-student-qr',{body:{student_id:student.id}});if(error||!data?.studentPageUrl)throw new Error(data?.error||error?.message||'Não foi possível gerar o QR Code.');const win=window.open(data.studentPageUrl,'_blank','noopener');if(!win){status.textContent='O navegador bloqueou a nova aba. Permita pop-ups para este site e tente novamente.';return}status.textContent='QR Code gerado! Ele será exibido em uma nova aba.';}catch(e){status.textContent='Erro: '+e.message;}finally{button.disabled=false}}\n$('studentLogout').onclick=()=>client.auth.signOut();
 
 async function loadSchools(){
   const {data:members,error:memberError}=await client
