@@ -12,7 +12,9 @@ const allowedOrigin = (origin: string | null) => {
       /^faceai-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
     const isFaceChatPreview = parsed.protocol === "https:" &&
       /^facechat-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
-    return isProduction || isFaceAiPreview || isFaceChatPreview ? origin : null;
+    const isFacePreview = parsed.protocol === "https:" &&
+      /^face-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
+    return isProduction || isFaceAiPreview || isFaceChatPreview || isFacePreview ? origin : null;
   } catch {
     return null;
   }
