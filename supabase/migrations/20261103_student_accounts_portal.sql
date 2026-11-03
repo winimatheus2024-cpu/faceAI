@@ -12,13 +12,14 @@ create table if not exists public.student_accounts (
   username text not null,
   created_at timestamptz not null default now(),
   constraint student_accounts_student_unique unique (student_id),
-  constraint student_accounts_username_unique unique (lower(username)),
   constraint student_accounts_student_school_fk
     foreign key (student_id, school_id)
     references public.students(id, school_id) on delete cascade,
   constraint student_accounts_username_format
     check (username ~ '^[a-z0-9_]{3,32}$')
 );
+
+create unique index if not exists student_accounts_username_unique_idx on public.student_accounts(lower(username));
 
 create or replace function public.is_linked_student(target_student uuid)
 returns boolean
