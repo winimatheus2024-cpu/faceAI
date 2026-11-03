@@ -25,11 +25,12 @@ h2{font-size:18px;margin:0 0 12px}.actions{display:flex;gap:8px;flex-wrap:wrap;m
 <body>
 <section class="login" id="authScreen"><div class="loginbox">
 <div class="logo">◎ FaceAI</div><h1>Plataforma Escolar</h1><p class="muted">Entre ou crie sua conta para começar.</p>
-<label>E-mail</label><input id="email" type="email" autocomplete="username" placeholder="voce@escola.com">
+<label>Usuário ou e-mail</label><input id="email" type="text" autocomplete="username" placeholder="aluno01 ou voce@escola.com">
 <label>Senha</label><input id="password" type="password" autocomplete="current-password" placeholder="Mínimo de 8 caracteres">
 <div class="actions"><button class="primary" id="signIn">Entrar</button><button class="secondary" id="signUp">Criar conta</button></div>
 <div id="authMsg" class="status">Configure o Supabase seguindo o README para ativar o acesso online.</div>
 </div></section>
+<section id="studentPortal" class="login" hidden><div class="loginbox" style="width:min(620px,100%)"><div class="logo">◎ FaceAI</div><h1>Área do aluno</h1><p class="muted" id="studentWelcome">Seus dados escolares</p><div class="card"><h2>Minha turma</h2><p id="studentClassName">Carregando...</p></div><div class="card"><h2>Meus dados</h2><p id="studentDetails"></p></div><div class="card"><h2>Minha frequência</h2><div id="studentAttendance"></div></div><button class="secondary" id="studentLogout">Sair</button></div></section>
 <div id="app" hidden>
 <header><div class="wrap top"><div class="logo" style="color:white">◎</div><div><h1>FaceAI</h1><p>Gestão escolar online</p></div><div class="spacer"></div><span class="user" id="userEmail"></span><button class="secondary" id="logout">Sair</button></div></header>
 <main class="wrap">
@@ -81,15 +82,29 @@ async function init(){if(!window.FACEAI_CONFIG?.url||!window.FACEAI_CONFIG?.anon
 }
 
 
-function showAuth(){$('authScreen').hidden=false;$('app').hidden=true}
-async function auth(mode){let email=$('email').value.trim(),password=$('password').value;if(!email||password.length<8){message('authMsg','Informe e-mail e senha com pelo menos 8 caracteres.','err');return}let res=mode==='in'?await client.auth.signInWithPassword({email,password}):await client.auth.signUp({email,password});if(res.error){message('authMsg',res.error.message,'err');return}if(mode==='up'&&!res.data.session){message('authMsg','Conta criada. Confirme seu e-mail e depois entre.','ok');return}if(res.data.session){session=res.data.session;await enterApp()}message('authMsg','Acesso realizado.','ok')}
+function showAuth(){$('authScreen').hidden=false;$('app').hidden=true;$('studentPortal').hidden=true}
+async function auth(mode){let login=$('email').value.trim(),password=$('password').value;if(!login||password.length<8){message('authMsg','Informe usuário/e-mail e senha com pelo menos 8 caracteres.','err');return}let email=login.includes('@')?login:login.toLowerCase()+'@faceai.com';let res=mode==='in'?await client.auth.signInWithPassword({email,password}):await client.auth.signUp({email:login,password});if(res.error){message('authMsg',res.error.message,'err');return}if(mode==='up'&&!res.data.session){message('authMsg','Conta criada. Confirme seu e-mail e depois entre.','ok');return}if(res.data.session){session=res.data.session;await enterApp()}message('authMsg','Acesso realizado.','ok')}
 $('signIn').onclick=()=>auth('in');$('signUp').onclick=()=>auth('up');$('logout').onclick=()=>client.auth.signOut();
 async function enterApp(){
   $('authScreen').hidden=true;
-  $('app').hidden=false;
-  $('userEmail').textContent=session.user.email;
-  await loadSchools();
+  const {data:studentAccount,error:studentAccountError}=await client.from('student_accounts').select('student_id,school_id,username').eq('user_id',session.user.id).maybeSingle();
+  if(studentAccountError){showAuth();message('authMsg','Não foi possível verificar o perfil: '+studentAccountError.message,'err');return}
+  if(studentAccount){$('app').hidden=true;$('studentPortal').hidden=false;await loadStudentPortal(studentAccount);return}
+  $('studentPortal').hidden=true;$('app').hidden=false;$('userEmail').textContent=session.user.email;await loadSchools();
 }
+async function loadStudentPortal(account){
+  const {data:student,error}=await client.from('students').select('id,name,registration,class_id,school_id').eq('id',account.student_id).eq('school_id',account.school_id).single();
+  if(error||!student){message('authMsg','Não foi possível carregar seus dados escolares.','err');await client.auth.signOut();return}
+  $('studentWelcome').textContent='Olá, '+student.name+'!';
+  $('studentDetails').textContent='Matrícula: '+(student.registration||'Não informada')+' • Usuário: '+account.username;
+  if(student.class_id){const {data:cl}=await client.from('classes').select('name,shift').eq('id',student.class_id).eq('school_id',account.school_id).maybeSingle();$('studentClassName').textContent=cl?cl.name+' — '+cl.shift:'Turma não encontrada';}else $('studentClassName').textContent='Você ainda não está vinculado a uma turma.';
+  const {data:records,error:attendanceError}=await client.from('attendance').select('date,status').eq('student_id',student.id).eq('school_id',account.school_id).order('date',{ascending:false}).limit(60);
+  const root=$('studentAttendance');root.innerHTML='';
+  if(attendanceError){root.textContent='Não foi possível carregar a frequência.';return}
+  if(!records?.length){root.textContent='Nenhum registro de frequência.';return}
+  records.forEach(record=>{const p=document.createElement('p');p.className='row';const d=document.createElement('span');d.textContent=new Date(record.date+'T12:00:00').toLocaleDateString('pt-BR');const st=document.createElement('b');st.textContent=record.status;p.append(d,st);root.append(p)});
+}
+$('studentLogout').onclick=()=>client.auth.signOut();
 
 async function loadSchools(){
   const {data:members,error:memberError}=await client
