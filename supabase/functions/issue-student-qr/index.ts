@@ -7,11 +7,11 @@ const allowedOrigin = (origin: string | null) => {
     const host = parsed.hostname.toLowerCase();
     const isProduction = parsed.protocol === "https:" && host === "faceai-plum.vercel.app";
     const isFaceAiPreview = parsed.protocol === "https:" &&
-      /^faceai-[a-z0-9-]+-wini9\\.vercel\\.app$/.test(host);
+      /^faceai-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
     const isFaceChatPreview = parsed.protocol === "https:" &&
-      /^facechat-[a-z0-9-]+-wini9\\.vercel\\.app$/.test(host);
+      /^facechat-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
     const isFacePreview = parsed.protocol === "https:" &&
-      /^face-[a-z0-9-]+-wini9\\.vercel\\.app$/.test(host);
+      /^face-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
     return isProduction || isFaceAiPreview || isFaceChatPreview || isFacePreview ? origin : null;
   } catch {
     return null;
