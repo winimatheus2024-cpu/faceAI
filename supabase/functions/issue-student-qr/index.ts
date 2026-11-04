@@ -43,7 +43,9 @@ const sha256 = async (value: string) => {
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   const respond = (body: unknown, status = 200) => json(body, status, origin);
+  let stage = "request-start";
 
+  try {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders(origin) });
   }
@@ -53,6 +55,7 @@ Deno.serve(async (req) => {
 
   // Validate the signed-in user JWT and obtain a server-side admin client.
   // The wrapper reads the new Supabase API keys/JWKS from the Edge environment.
+  stage = "authentication";
   const { data: ctx, error: authError } = await createSupabaseContext(req, { auth: "user" });
   if (authError || !ctx?.userClaims?.id || !ctx.supabaseAdmin) {
     return respond({ error: authError?.message || "Sessão inválida." }, authError?.status || 401);
@@ -71,6 +74,7 @@ Deno.serve(async (req) => {
   const db = ctx.supabaseAdmin;
   const userId = ctx.userClaims.id;
 
+  stage = "student-lookup";
   const { data: student, error: studentError } = await db
     .from("students")
     .select("id, school_id, name")
@@ -82,6 +86,7 @@ Deno.serve(async (req) => {
     return respond({ error: "Aluno não encontrado." }, 404);
   }
 
+  stage = "authorization-check";
   const { data: membership, error: memberError } = await db
     .from("school_members")
     .select("role")
@@ -110,6 +115,7 @@ Deno.serve(async (req) => {
   const token = [...random].map((b) => b.toString(16).padStart(2, "0")).join("");
   const tokenHash = await sha256(token);
 
+  stage = "credential-insert";
   const { data: inserted, error: insertError } = await db
     .from("student_qr_credentials")
     .insert({
@@ -129,6 +135,7 @@ Deno.serve(async (req) => {
     }, 500);
   }
 
+  stage = "old-credential-revoke";
   const { error: revokeError } = await db
     .from("student_qr_credentials")
     .update({ active: false, revoked_at: new Date().toISOString() })
@@ -145,6 +152,7 @@ Deno.serve(async (req) => {
     }, 500);
   }
 
+  stage = "app-url-validation";
   const appBaseUrl = Deno.env.get("APP_BASE_URL");
   let appOrigin: URL;
   try {
@@ -162,4 +170,9 @@ Deno.serve(async (req) => {
     studentPageUrl: `${appOrigin.origin}/aluno-qr.html?t=${token}`,
     message: "Guarde e entregue este código somente ao aluno. Ele não será exibido novamente.",
   });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro inesperado";
+    console.error("issue-student-qr diagnostic", { stage, message });
+    return respond({ error: "Falha interna na etapa: " + stage, detail: message }, 500);
+  }
 });
