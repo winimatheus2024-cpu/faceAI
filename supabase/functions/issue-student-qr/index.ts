@@ -47,11 +47,23 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return respond({ error: "Método não permitido." }, 405);
 
   const url = Deno.env.get("SUPABASE_URL");
-  const anon = Deno.env.get("SUPABASE_ANON_KEY");
-  const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const publishableKeysRaw = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS");
+  const secretKeysRaw = Deno.env.get("SUPABASE_SECRET_KEYS");
   const appBaseUrl = Deno.env.get("APP_BASE_URL");
   const authHeader = req.headers.get("Authorization");
-  if (!url || !anon || !service || !appBaseUrl || !authHeader) return respond({ error: "Configuração ou autenticação ausente. Verifique APP_BASE_URL." }, 500);
+  if (!url || !publishableKeysRaw || !secretKeysRaw || !appBaseUrl || !authHeader) return respond({ error: "Configuração ou autenticação ausente. Verifique os secrets da função e APP_BASE_URL." }, 500);
+
+  let publishableKey: string;
+  let secretKey: string;
+  try {
+    const publishableKeys = JSON.parse(publishableKeysRaw);
+    const secretKeys = JSON.parse(secretKeysRaw);
+    publishableKey = publishableKeys["default"];
+    secretKey = secretKeys["default"];
+    if (typeof publishableKey !== "string" || typeof secretKey !== "string") throw new Error("Chave default ausente");
+  } catch {
+    return respond({ error: "Não foi possível ler as novas chaves do Supabase. Verifique se existem chaves default." }, 500);
+  }
   let appOrigin: URL;
   try {
     appOrigin = new URL(appBaseUrl);
@@ -60,7 +72,7 @@ Deno.serve(async (req) => {
     return respond({ error: "APP_BASE_URL deve ser uma URL HTTPS válida." }, 500);
   }
 
-  const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
+  const userClient = createClient(url, publishableKey, { global: { headers: { Authorization: authHeader } } });
   const { data: authData, error: authError } = await userClient.auth.getUser();
   const user = authData.user;
   if (authError || !user) return respond({ error: "Sessão inválida." }, 401);
@@ -69,7 +81,7 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { return respond({ error: "JSON inválido." }, 400); }
   if (!body.student_id || !/^[0-9a-f-]{36}$/i.test(body.student_id)) return respond({ error: "Aluno inválido." }, 400);
 
-  const db = createClient(url, service, { auth: { persistSession: false } });
+  const db = createClient(url, secretKey, { auth: { persistSession: false } });
   const { data: student, error: studentError } = await db
     .from("students").select("id, school_id, name").eq("id", body.student_id).maybeSingle();
   if (studentError || !student) return respond({ error: "Aluno não encontrado." }, 404);
