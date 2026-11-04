@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d5ff"/><stop offset=".55" stop-color="#2563ff"/><stop offset="1" stop-color="#a855f7"/></linearGradient><radialGradient id="bg"><stop stop-color="#102b66"/><stop offset="1" stop-color="#050b20"/></radialGradient></defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<rect x="18" y="18" width="476" height="476" rx="96" fill="none" stroke="url(#g)" stroke-width="8"/>
+<g fill="none" stroke="url(#g)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+<path d="M160 160 Q256 70 352 160 L370 238 Q370 342 256 374 Q142 342 142 238Z"/>
+<path d="M185 230h42m58 0h42M235 282q21 18 42 0M256 156v190"/>
+<path d="M110 180h38m-38 0v38M402 180h-38m38 0v38M110 320h38m-38 0v-38M402 320h-38m38 0v-38"/>
+</g>
+<g fill="#b9f5ff"><circle cx="206" cy="230" r="8"/><circle cx="306" cy="230" r="8"/><circle cx="256" cy="282" r="7"/></g>
+<text x="256" y="442" text-anchor="middle" font-family="Arial,sans-serif" font-size="64" font-weight="800" fill="#fff">Face<tspan fill="#38bdf8">IA</tspan></text>
+</svg>
