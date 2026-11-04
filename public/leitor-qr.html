@@ -108,6 +108,39 @@ async function start(){
   stopCamera();say(cameraError(error));
  }finally{button.disabled=false;button.textContent=cameraStream?'Desligar câmera':'Permitir câmera e iniciar leitor';}
 }
+function showStudent(student,attendance){
+ const card=document.getElementById('studentCard');
+ card.replaceChildren();
+ card.hidden=false;
+ const top=document.createElement('div');top.className='profile-top';
+ if(student?.photo_url){
+  const photo=document.createElement('img');photo.className='student-photo';photo.src=student.photo_url;photo.alt='Foto de '+(student.name||'aluno');top.appendChild(photo);
+ }else{
+  const placeholder=document.createElement('div');placeholder.className='photo-placeholder';placeholder.textContent='Foto não cadastrada';top.appendChild(placeholder);
+ }
+ const info=document.createElement('div');info.className='profile-name';
+ const kicker=document.createElement('span');kicker.className='profile-kicker';kicker.textContent='Aluno identificado';
+ const name=document.createElement('h2');name.textContent=student?.name||'Aluno';
+ const meta=document.createElement('p');meta.className='profile-meta';meta.textContent='Matrícula: '+(student?.registration||'Não informada')+'\\nTurma: '+(student?.class_name||'Não informada');
+ meta.style.whiteSpace='pre-line';
+ info.append(kicker,name,meta);top.appendChild(info);card.appendChild(top);
+ const favorites=[['🎨','Cor preferida',student?.favorite_color],['⚽','Time do coração',student?.favorite_team],['🎵','Música preferida',student?.favorite_music],['🎯','Profissão futura',student?.future_profession],['🍽️','Comida preferida',student?.food_preference],['🎮','Lazer preferido',student?.leisure_preference]];
+ const section=document.createElement('div');section.className='favorites';
+ const heading=document.createElement('h3');heading.textContent='Preferências do aluno';section.appendChild(heading);
+ const grid=document.createElement('div');grid.className='favorite-grid';
+ favorites.forEach(([emoji,label,value])=>{
+  const item=document.createElement('div');item.className='favorite-item';
+  const icon=document.createElement('span');icon.className='favorite-icon';icon.textContent=emoji;
+  const copy=document.createElement('div');copy.className='favorite-copy';
+  const caption=document.createElement('span');caption.className='favorite-label';caption.textContent=label;
+  const val=document.createElement('span');val.className='favorite-value';val.textContent=value||'Não informado';
+  copy.append(caption,val);item.append(icon,copy);grid.appendChild(item);
+ });
+ section.appendChild(grid);card.appendChild(section);
+ if(attendance){
+  const line=document.createElement('p');line.className='attendance-line';line.textContent='Presença: '+(attendance.status||'Registrada')+(attendance.date?' • '+attendance.date:'');card.appendChild(line);
+ }
+}
 async function processQr(decoded,accessToken){
  if(locked)return;locked=true;say('QR lido. Validando presença…');
  try{
