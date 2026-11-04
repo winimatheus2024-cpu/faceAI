@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "FaceIA",
+  "short_name": "FaceIA",
+  "description": "Plataforma de gestão escolar",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07132f",
+  "theme_color": "#07132f",
+  "orientation": "portrait",
+  "icons": [
+    {"src": "/icons/faceia.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ]
+}
