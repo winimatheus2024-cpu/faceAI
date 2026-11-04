@@ -70,6 +70,14 @@ function updateRoleInterface(){
   $('team').querySelector('.card').hidden=!isAdmin;
   const teamTab=document.querySelector('.nav button[data-page="team"]');
   teamTab.hidden=!isAdmin;
+  // Oculta os módulos de teste de câmera e simulação para a direção (admin).
+  ['faceTest','faceDemo'].forEach(page=>{
+    const tab=document.querySelector('.nav button[data-page="'+page+'"]');
+    if(tab) tab.hidden=isAdmin;
+    const panel=$(page);
+    if(panel) panel.hidden=isAdmin;
+  });
+  if(isAdmin && ['faceTest','faceDemo'].includes(document.querySelector('.panel.active')?.id)) go('dashboard');
   document.querySelectorAll('#studentsList .delete-student').forEach(button=>button.hidden=!isAdmin);
 }
 function go(page){document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===page));document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));if(page==='attendance')renderAttendance()}
