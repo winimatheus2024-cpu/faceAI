@@ -6,7 +6,7 @@
 <title>FaceAI — Leitor QR</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/config.js"></script>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
 :root{color-scheme:light;--ink:#17243a;--muted:#64748b;--line:#e2e8f0;--blue:#1769aa;--blue-dark:#124f83;--surface:#f4f7fb}
 *{box-sizing:border-box}
@@ -35,8 +35,8 @@ hr{border:0;border-top:1px solid var(--line);margin:25px 0}h2.section-title{font
 <body>
 <main class="box">
 <header><span class="eyebrow">FaceAI • Controle de presença</span><h1>Leitor de QR Code</h1><p>Entre com a conta do professor e inicie a câmera para identificar o aluno e registrar a presença.</p></header>
-<button id="start">Entrar e iniciar câmera</button>
-<div id="reader"></div>
+<button id="start">Permitir câmera e iniciar leitor</button>
+<div id="reader" style="margin-top:18px;background:#10283d;border-radius:14px;overflow:hidden;min-height:180px;display:none"><video id="cameraPreview" playsinline muted style="display:block;width:100%;max-height:65vh;object-fit:cover"></video><canvas id="qrCanvas" hidden></canvas></div>
 <div id="status" class="status">Aguardando autenticação.</div>
 <div id="studentCard" class="student-card" hidden></div>
 <hr>
@@ -45,52 +45,83 @@ hr{border:0;border-top:1px solid var(--line);margin:25px 0}h2.section-title{font
 <div id="reviews"></div>
 </main>
 <script>
-const statusEl=document.getElementById('status');let client,scanner,locked=false;
+const statusEl=document.getElementById('status');
+let client,cameraStream=null,scanFrame=null,locked=false,scanCanvas,scanContext;
 function say(t){statusEl.textContent=t}
-function showStudent(student,attendance){
- const card=document.getElementById('studentCard');card.replaceChildren();
- if(!student){card.hidden=true;return}
- const top=document.createElement('div');top.className='profile-top';
- if(student.photo_url){const img=document.createElement('img');img.className='student-photo';img.src=student.photo_url;img.alt='Foto de identificação de '+student.name;top.append(img)}
- else{const placeholder=document.createElement('div');placeholder.className='photo-placeholder';placeholder.textContent='Foto não cadastrada';top.append(placeholder)}
- const info=document.createElement('div');info.className='profile-name';
- const kicker=document.createElement('span');kicker.className='profile-kicker';kicker.textContent='Perfil do aluno';
- const title=document.createElement('h2');title.textContent=student.name||'Aluno';
- const meta=document.createElement('p');meta.className='profile-meta';meta.textContent=[student.registration?'Matrícula: '+student.registration:null,student.class_name?'Turma: '+student.class_name:null].filter(Boolean).join(' • ')||'Dados cadastrais';
- info.append(kicker,title,meta);top.append(info);card.append(top);
- const section=document.createElement('section');section.className='favorites';
- const heading=document.createElement('h3');heading.textContent='Preferências do aluno';section.append(heading);
- const grid=document.createElement('div');grid.className='favorite-grid';
- const items=[['🎨','Cor favorita',student.favorite_color],['❤️','Time do coração',student.favorite_team],['🍽️','Comida favorita',student.food_preference],['🎯','Lazer favorito',student.leisure_preference]];
- items.forEach(([emoji,label,value])=>{const item=document.createElement('div');item.className='favorite-item';const icon=document.createElement('span');icon.className='favorite-icon';icon.textContent=emoji;const copy=document.createElement('div');copy.className='favorite-copy';const name=document.createElement('span');name.className='favorite-label';name.textContent=label;const val=document.createElement('span');val.className='favorite-value';val.textContent=value||'Não informado';copy.append(name,val);item.append(icon,copy);grid.append(item)});
- section.append(grid);card.append(section);
- const attendanceLine=document.createElement('p');attendanceLine.className='attendance-line';attendanceLine.textContent=attendance?'Chamada: '+(attendance.status||'Presente')+' • '+(attendance.date||''):'Aguardando revisão da direção — presença ainda não confirmada.';card.append(attendanceLine);
- card.hidden=false;
+function stopCamera(){
+ if(scanFrame)cancelAnimationFrame(scanFrame);
+ scanFrame=null;
+ if(cameraStream){cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null;}
+ const video=document.getElementById('cameraPreview');
+ if(video){video.pause();video.srcObject=null;}
+ document.getElementById('reader').style.display='none';
+}
+function cameraError(error){
+ const name=error?.name||'';
+ if(name==='NotAllowedError'||name==='PermissionDeniedError')return 'O Chrome/Samsung bloqueou a câmera. Libere a permissão do site nas configurações do Chrome e tente novamente.';
+ if(name==='NotFoundError'||name==='DevicesNotFoundError')return 'Nenhuma câmera foi encontrada neste dispositivo.';
+ if(name==='NotReadableError'||name==='TrackStartError')return 'A câmera está sendo usada por outro aplicativo. Feche outros apps que usam a câmera e tente novamente.';
+ if(name==='OverconstrainedError')return 'A câmera traseira não está disponível. Verifique se a câmera do celular funciona normalmente.';
+ return 'Não foi possível abrir a câmera: '+(error?.message||name||'erro desconhecido');
 }
 async function start(){
- if(!window.FACEAI_CONFIG?.url||!window.FACEAI_CONFIG?.anonKey){say('Configuração do Supabase ausente.');return}
- client=window.supabase.createClient(FACEAI_CONFIG.url,FACEAI_CONFIG.anonKey);
- const {data:{session},error}=await client.auth.getSession();
- if(error||!session){say('Faça login no FaceAI em outra aba e abra novamente este leitor.');return}
- if(!window.Html5Qrcode){say('Leitor não carregou. Verifique a conexão.');return}
- scanner=new Html5Qrcode('reader');
- try{await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},async(decoded)=>{
-   if(locked)return;locked=true;say('QR lido. Validando presença…');
-   try{
-    const {data,error}=await client.functions.invoke('record-attendance-by-qr',{headers:{Authorization:`Bearer ${session.access_token}`},body:{token:decoded.trim()}});
-    if(error||data?.error){
-      let detail=data?.error||error?.message||'Falha ao validar QR.';
-      try{if(error?.context){const response=error.context.clone();const payload=await response.json();if(payload?.error)detail=payload.error;}}catch{}
-      say(detail);
-    }
-    else if(data.status==='already_recorded'){say(data.message||'Presença já registrada hoje.');showStudent(data.student,data.attendance);}
-    else if(data.status==='pending_review'){say(data.message||'Solicitação enviada para revisão da direção. A presença ainda não foi confirmada.');showStudent(data.student,null);}
-    else if(data.status==='recorded'&&data.student&&data.attendance){say('Presença registrada: '+data.student.name+' — '+data.attendance.date);showStudent(data.student,data.attendance);}
-    else{say('Resposta inesperada do servidor. A presença não foi confirmada; consulte a direção.');}
-   }catch(e){say('Erro: '+e.message)}
-   setTimeout(()=>{locked=false;say('Pronto para ler o próximo QR Code.');},2500);
-  });say('Câmera ativa. Aponte para o QR Code do aluno.')}
- catch(e){say('Não foi possível abrir a câmera: '+e)}
+ const button=document.getElementById('start');
+ if(cameraStream){stopCamera();button.textContent='Permitir câmera e iniciar leitor';say('Câmera desligada.');return;}
+ if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){say('O navegador não liberou a câmera. Abra o FaceAI pelo Chrome usando o endereço HTTPS.');return;}
+ if(!window.jsQR){say('O leitor QR não carregou. Verifique a conexão e atualize a página.');return;}
+ button.disabled=true;say('Solicitando permissão para usar a câmera…');
+ try{
+  // Solicita a câmera imediatamente durante o toque do usuário, antes de qualquer chamada de rede.
+  try{
+   cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+  }catch(firstError){
+   if(firstError?.name==='OverconstrainedError'){
+    cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:true});
+   }else throw firstError;
+  }
+  const video=document.getElementById('cameraPreview');
+  video.srcObject=cameraStream;
+  await video.play();
+  document.getElementById('reader').style.display='block';
+  scanCanvas=document.getElementById('qrCanvas');
+  scanContext=scanCanvas.getContext('2d',{willReadFrequently:true});
+  say('Câmera ativa. Aponte para o QR Code do aluno.');
+  client=window.supabase.createClient(FACEAI_CONFIG.url,FACEAI_CONFIG.anonKey);
+  const {data:{session},error}=await client.auth.getSession();
+  if(error||!session){
+   stopCamera();say('Câmera liberada, mas falta entrar na conta do professor. Faça login no FaceAI e abra novamente o leitor.');return;
+  }
+  const scan=async()=>{
+   if(!cameraStream||video.readyState!==video.HAVE_ENOUGH_DATA){scanFrame=requestAnimationFrame(scan);return;}
+   const width=video.videoWidth,height=video.videoHeight;
+   if(width&&height){
+    if(scanCanvas.width!==width||scanCanvas.height!==height){scanCanvas.width=width;scanCanvas.height=height;}
+    scanContext.drawImage(video,0,0,width,height);
+    const pixels=scanContext.getImageData(0,0,width,height);
+    const code=window.jsQR(pixels.data,width,height,{inversionAttempts:'attemptBoth'});
+    if(code?.data&&!locked){await processQr(code.data,session.access_token);}
+   }
+   scanFrame=requestAnimationFrame(scan);
+  };
+  scanFrame=requestAnimationFrame(scan);
+ }catch(error){
+  stopCamera();say(cameraError(error));
+ }finally{button.disabled=false;button.textContent=cameraStream?'Desligar câmera':'Permitir câmera e iniciar leitor';}
+}
+async function processQr(decoded,accessToken){
+ if(locked)return;locked=true;say('QR lido. Validando presença…');
+ try{
+  const {data,error}=await client.functions.invoke('record-attendance-by-qr',{headers:{Authorization:`Bearer ${accessToken}`},body:{token:decoded.trim()}});
+  if(error||data?.error){
+   let detail=data?.error||error?.message||'Falha ao validar QR.';
+   try{if(error?.context){const response=error.context.clone();const payload=await response.json();if(payload?.error)detail=payload.error;}}catch{}
+   say(detail);
+  }else if(data.status==='already_recorded'){say(data.message||'Presença já registrada hoje.');showStudent(data.student,data.attendance);}
+  else if(data.status==='pending_review'){say(data.message||'Solicitação enviada para revisão da direção. A presença ainda não foi confirmada.');showStudent(data.student,null);}
+  else if(data.status==='recorded'&&data.student&&data.attendance){say('Presença registrada: '+data.student.name+' — '+data.attendance.date);showStudent(data.student,data.attendance);}
+  else{say('Resposta inesperada do servidor. A presença não foi confirmada; consulte a direção.');}
+ }catch(error){say('Erro ao validar QR: '+error.message);}
+ setTimeout(()=>{locked=false;if(cameraStream)say('Pronto para ler o próximo QR Code.');},2500);
 }
 async function loadReviews(){
  const host=document.getElementById('reviews');host.textContent='Carregando…';
