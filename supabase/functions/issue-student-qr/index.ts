@@ -1,6 +1,4 @@
-// Supabase Edge Function: issue-student-qr
-// Requires SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createSupabaseContext } from "npm:@supabase/server@1";
 
 const allowedOrigin = (origin: string | null) => {
   if (!origin) return null;
@@ -9,16 +7,17 @@ const allowedOrigin = (origin: string | null) => {
     const host = parsed.hostname.toLowerCase();
     const isProduction = parsed.protocol === "https:" && host === "faceai-plum.vercel.app";
     const isFaceAiPreview = parsed.protocol === "https:" &&
-      /^faceai-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
+      /^faceai-[a-z0-9-]+-wini9\\.vercel\\.app$/.test(host);
     const isFaceChatPreview = parsed.protocol === "https:" &&
-      /^facechat-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
+      /^facechat-[a-z0-9-]+-wini9\\.vercel\\.app$/.test(host);
     const isFacePreview = parsed.protocol === "https:" &&
-      /^face-[a-z0-9-]+-wini9\.vercel\.app$/.test(host);
+      /^face-[a-z0-9-]+-wini9\\.vercel\\.app$/.test(host);
     return isProduction || isFaceAiPreview || isFaceChatPreview || isFacePreview ? origin : null;
   } catch {
     return null;
   }
 };
+
 const corsHeaders = (origin: string | null) => {
   const allowed = allowedOrigin(origin);
   return {
@@ -42,82 +41,119 @@ const sha256 = async (value: string) => {
 };
 
 Deno.serve(async (req) => {
-  const respond = (body: unknown, status = 200) => json(body, status, req.headers.get("Origin"));
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req.headers.get("Origin")) });
-  if (req.method !== "POST") return respond({ error: "Método não permitido." }, 405);
+  const origin = req.headers.get("Origin");
+  const respond = (body: unknown, status = 200) => json(body, status, origin);
 
-  const url = Deno.env.get("SUPABASE_URL");
-  const publishableKeysRaw = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS");
-  const secretKeysRaw = Deno.env.get("SUPABASE_SECRET_KEYS");
-  const appBaseUrl = Deno.env.get("APP_BASE_URL");
-  const authHeader = req.headers.get("Authorization");
-  if (!url || !publishableKeysRaw || !secretKeysRaw || !appBaseUrl || !authHeader) return respond({ error: "Configuração ou autenticação ausente. Verifique os secrets da função e APP_BASE_URL." }, 500);
-
-  let publishableKey: string;
-  let secretKey: string;
-  try {
-    const publishableKeys = JSON.parse(publishableKeysRaw);
-    const secretKeys = JSON.parse(secretKeysRaw);
-    publishableKey = publishableKeys["default"];
-    secretKey = secretKeys["default"];
-    if (typeof publishableKey !== "string" || typeof secretKey !== "string") throw new Error("Chave default ausente");
-  } catch {
-    return respond({ error: "Não foi possível ler as novas chaves do Supabase. Verifique se existem chaves default." }, 500);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders(origin) });
   }
-  let appOrigin: URL;
-  try {
-    appOrigin = new URL(appBaseUrl);
-    if (appOrigin.protocol !== "https:" || appOrigin.username || appOrigin.password) throw new Error("URL inválida");
-  } catch {
-    return respond({ error: "APP_BASE_URL deve ser uma URL HTTPS válida." }, 500);
+  if (req.method !== "POST") {
+    return respond({ error: "Método não permitido." }, 405);
   }
 
-  const userClient = createClient(url, publishableKey, { global: { headers: { Authorization: authHeader } } });
-  const { data: authData, error: authError } = await userClient.auth.getUser();
-  const user = authData.user;
-  if (authError || !user) return respond({ error: "Sessão inválida." }, 401);
+  // Validate the signed-in user JWT and obtain a server-side admin client.
+  // The wrapper reads the new Supabase API keys/JWKS from the Edge environment.
+  const { data: ctx, error: authError } = await createSupabaseContext(req, { auth: "user" });
+  if (authError || !ctx?.userClaims?.id || !ctx.supabaseAdmin) {
+    return respond({ error: authError?.message || "Sessão inválida." }, authError?.status || 401);
+  }
 
   let body: { student_id?: string };
-  try { body = await req.json(); } catch { return respond({ error: "JSON inválido." }, 400); }
-  if (!body.student_id || !/^[0-9a-f-]{36}$/i.test(body.student_id)) return respond({ error: "Aluno inválido." }, 400);
+  try {
+    body = await req.json();
+  } catch {
+    return respond({ error: "JSON inválido." }, 400);
+  }
+  if (!body.student_id || !/^[0-9a-f-]{36}$/i.test(body.student_id)) {
+    return respond({ error: "Aluno inválido." }, 400);
+  }
 
-  const db = createClient(url, secretKey, { auth: { persistSession: false } });
+  const db = ctx.supabaseAdmin;
+  const userId = ctx.userClaims.id;
+
   const { data: student, error: studentError } = await db
-    .from("students").select("id, school_id, name").eq("id", body.student_id).maybeSingle();
-  if (studentError || !student) return respond({ error: "Aluno não encontrado." }, 404);
+    .from("students")
+    .select("id, school_id, name")
+    .eq("id", body.student_id)
+    .maybeSingle();
+
+  if (studentError || !student) {
+    console.error("issue-student-qr: student lookup failed", studentError?.message);
+    return respond({ error: "Aluno não encontrado." }, 404);
+  }
 
   const { data: membership, error: memberError } = await db
-    .from("school_members").select("role").eq("school_id", student.school_id)
-    .eq("user_id", user.id).maybeSingle();
+    .from("school_members")
+    .select("role")
+    .eq("school_id", student.school_id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
   const { data: studentAccount, error: studentAccountError } = await db
-    .from("student_accounts").select("student_id").eq("school_id", student.school_id)
-    .eq("student_id", student.id).eq("user_id", user.id).maybeSingle();
+    .from("student_accounts")
+    .select("student_id")
+    .eq("school_id", student.school_id)
+    .eq("student_id", student.id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
   const isAdmin = !memberError && membership?.role === "admin";
   const isOwnStudent = !studentAccountError && studentAccount?.student_id === student.id;
-  if (!isAdmin && !isOwnStudent) return respond({ error: "Somente a direção ou o próprio aluno pode emitir este QR Code." }, 403);
 
-  // Create the replacement first. Only revoke the old credential after the new one exists.
+  if (!isAdmin && !isOwnStudent) {
+    return respond({
+      error: "Somente a direção ou o próprio aluno pode emitir este QR Code."
+    }, 403);
+  }
+
   const random = crypto.getRandomValues(new Uint8Array(32));
   const token = [...random].map((b) => b.toString(16).padStart(2, "0")).join("");
   const tokenHash = await sha256(token);
-  const { data: inserted, error: insertError } = await db.from("student_qr_credentials").insert({
-    school_id: student.school_id,
-    student_id: student.id,
-    token_hash: tokenHash,
-    created_by: user.id,
-    active: true,
-  }).select("id").single();
-  if (insertError || !inserted) return respond({ error: "Não foi possível emitir o QR Code. O código anterior foi mantido." }, 500);
 
-  const { error: revokeError } = await db.from("student_qr_credentials")
+  const { data: inserted, error: insertError } = await db
+    .from("student_qr_credentials")
+    .insert({
+      school_id: student.school_id,
+      student_id: student.id,
+      token_hash: tokenHash,
+      created_by: userId,
+      active: true,
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !inserted) {
+    console.error("issue-student-qr: credential insert failed", insertError?.message);
+    return respond({
+      error: "Não foi possível emitir o QR Code. O código anterior foi mantido."
+    }, 500);
+  }
+
+  const { error: revokeError } = await db
+    .from("student_qr_credentials")
     .update({ active: false, revoked_at: new Date().toISOString() })
-    .eq("student_id", student.id).eq("school_id", student.school_id)
-    .eq("active", true).neq("id", inserted.id);
+    .eq("student_id", student.id)
+    .eq("school_id", student.school_id)
+    .eq("active", true)
+    .neq("id", inserted.id);
 
   if (revokeError) {
-    // Best-effort rollback: do not return a QR unless rotation completed.
+    console.error("issue-student-qr: old credential revocation failed", revokeError.message);
     await db.from("student_qr_credentials").delete().eq("id", inserted.id);
-    return respond({ error: "Não foi possível concluir a renovação. O QR anterior foi preservado sempre que possível." }, 500);
+    return respond({
+      error: "Não foi possível concluir a renovação. O QR anterior foi preservado sempre que possível."
+    }, 500);
+  }
+
+  const appBaseUrl = Deno.env.get("APP_BASE_URL");
+  let appOrigin: URL;
+  try {
+    appOrigin = new URL(appBaseUrl || "");
+    if (appOrigin.protocol !== "https:" || appOrigin.username || appOrigin.password) {
+      throw new Error("URL inválida");
+    }
+  } catch {
+    return respond({ error: "APP_BASE_URL deve ser uma URL HTTPS válida." }, 500);
   }
 
   return respond({
